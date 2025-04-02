@@ -33,8 +33,6 @@ def test_config_manager():
     print(f"Receiver Coordinates: {config.get_receiver_coordinates()}")
     print(f"MQTT Settings: {config.get_mqtt_settings()}")
     print(f"SDR Type: {config.get_sdr_type()}")
-    print(f"Device Serial: {config.get_device_serial()}")
-    print(f"Device Index: {config.get_device_index()}")
     print(f"Lite Mode: {config.is_lite_mode()}")
     
     # Test setting lite mode
@@ -51,7 +49,14 @@ def test_sdr_manager():
     try:
         # Load the actual config file
         from config_manager import load_config
-        config = load_config('config.ini')
+        
+        # Try to load the config from file
+        try:
+            config = load_config('config.ini')
+            print("Using config from config.ini")
+        except Exception as e:
+            print(f"Error loading config file: {e}")
+            raise
         
         # Initialize SDR device using config
         sdr = SDRManager(config.config)
@@ -72,6 +77,7 @@ def test_sdr_manager():
         samples = sdr.read_samples(1024 * 64)
         
         # Calculate some basic statistics
+        import numpy as np
         signal_strength = 10 * np.log10(np.mean(np.abs(samples)**2))
         print(f"Read {len(samples)} samples at 145 MHz")
         print(f"Signal strength: {signal_strength:.2f} dB")
@@ -87,8 +93,19 @@ def test_feature_extraction():
     print("\n=== Testing Feature Extraction ===")
     
     try:
-        # Initialize SDR device
-        sdr = SDRManager(sdr_type='rtlsdr', sample_rate=2.048e6, gain='auto')
+        # Load the actual config file
+        from config_manager import load_config
+        
+        # Try to load the config from file
+        try:
+            config = load_config('config.ini')
+            print("Using config from config.ini")
+        except Exception as e:
+            print(f"Error loading config file: {e}")
+            raise
+        
+        # Initialize SDR device using config
+        sdr = SDRManager(config.config)
         sdr.initialize_device()
         
         # Read some samples
@@ -119,7 +136,15 @@ def test_scanner():
     
     try:
         # Load configuration
-        config = load_config('config.ini')
+        from config_manager import load_config
+        
+        # Try to load the config from file
+        try:
+            config = load_config('config.ini')
+            print("Using config from config.ini")
+        except Exception as e:
+            print(f"Error loading config file: {e}")
+            raise
         
         # Initialize SDR device with config
         sdr = SDRManager(config.config)
@@ -161,8 +186,13 @@ def test_spectrum_alert():
     print("\n=== Testing SpectrumAlert ===")
     
     try:
-        # Create a SpectrumAlert instance
-        spectrum_alert = create_spectrum_alert(lite_mode=True)
+        # Create a SpectrumAlert instance using real config
+        try:
+            spectrum_alert = create_spectrum_alert('config.ini')
+            print("Using config from config.ini")
+        except Exception as e:
+            print(f"Error loading config file: {e}")
+            raise
         
         # Analyze a single frequency
         print("Analyzing 145 MHz...")
