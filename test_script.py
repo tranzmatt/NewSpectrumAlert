@@ -12,14 +12,14 @@ import sys
 from config_manager import ConfigManager, load_config
 from sdr_manager import SDRManager, get_sdr_device
 from scanner import Scanner
-from model_manager import ModelManager
-from mqtt_client import MQTTClient
-from gps_manager import GPSManager
+#from model_manager import ModelManager
+#from mqtt_client import MQTTClient
+#from gps_manager import GPSManager
 from feature_extraction import extract_features, calculate_signal_strength
 from spectrum_alert import create_spectrum_alert
 
 # Import numpy for test_sdr_manager
-import numpy as np
+# import numpy as np
 
 def test_config_manager(config):
     """Test the ConfigManager module."""

@@ -8,8 +8,8 @@ from sklearn.decomposition import PCA
 
 from feature_extraction import extract_features, calculate_signal_strength
 
-# Thread lock for safe file access
-file_lock = threading.Lock()
+from csv_writer import CSVWriter
+
 
 class Scanner:
     """
@@ -31,6 +31,7 @@ class Scanner:
         self.sample_rate = config_manager.get_sample_rate()
         self.runs_per_freq = config_manager.get_runs_per_freq()
         self.lite_mode = config_manager.is_lite_mode()
+        self.csv_writer = CSVWriter(self.lite_mode)
         
         # Get min_db from config if available
         if hasattr(config_manager.config, 'get'):
@@ -66,38 +67,7 @@ class Scanner:
         # Fit PCA
         self.pca = PCA(n_components=n_components)
         self.pca.fit(pca_training_data)
-    
-    def save_data_to_csv(self, data, filename):
-        """
-        Save collected data to a CSV file.
-        
-        Parameters:
-        data (list): Data to save
-        filename (str): CSV file path
-        """
-        directory = os.path.dirname(filename)
-        if directory:
-            os.makedirs(directory, exist_ok=True)
-        
-        with file_lock:  # Ensure thread-safe file writing
-            with open(filename, 'a', newline='') as f:
-                writer = csv.writer(f)
-                
-                with self.header_lock:
-                    if not self.header_written:
-                        if self.lite_mode:
-                            writer.writerow(['Frequency', 'Mean_Amplitude', 'Std_Amplitude'])
-                        else:
-                            writer.writerow([
-                                'Frequency', 'Mean_Amplitude', 'Std_Amplitude', 
-                                'Mean_FFT_Magnitude', 'Std_FFT_Magnitude',
-                                'Skew_Amplitude', 'Kurt_Amplitude', 'Skew_Phase', 'Kurt_Phase', 
-                                'Cyclo_Autocorr', 'Spectral_Entropy', 'PAPR', 'Band_Energy_Ratio'
-                            ])
-                        self.header_written = True
-                
-                writer.writerow(data)
-    
+
     def scan_band(self, band_start, band_end, filename):
         """
         Scan a frequency band and collect signal data.
@@ -130,8 +100,8 @@ class Scanner:
                 data = [current_freq] + avg_features.tolist()
             
             # Save to CSV
-            self.save_data_to_csv(data, filename)
-            
+            self.csv_writer.save_data_to_csv(data, filename)
+
             # Move to the next frequency
             current_freq += self.freq_step
     
