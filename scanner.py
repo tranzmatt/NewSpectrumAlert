@@ -1,14 +1,14 @@
 import numpy as np
 import time
-import os
-import csv
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from sklearn.decomposition import PCA
 
-from feature_extraction import extract_features, calculate_signal_strength
+from feature_extraction import FeatureExtractor
 
 from csv_writer import CSVWriter
+from config_manager import ConfigManager
+from sdr_manager import SDRManager
 
 
 class Scanner:
@@ -16,30 +16,40 @@ class Scanner:
     A class for scanning frequency bands and collecting signal data.
     """
     
-    def __init__(self, sdr_manager, config_manager):
+    def __init__(self, sdr_manager: SDRManager, config: ConfigManager):
         """
         Initialize the scanner.
         
         Parameters:
         sdr_manager: SDR device manager
-        config_manager: Configuration manager
+        config: Configuration manager
         """
         self.sdr_manager = sdr_manager
-        self.config_manager = config_manager
-        self.ham_bands = config_manager.get_ham_bands()
-        self.freq_step = config_manager.get_freq_step()
-        self.sample_rate = config_manager.get_sample_rate()
-        self.runs_per_freq = config_manager.get_runs_per_freq()
-        self.lite_mode = config_manager.is_lite_mode()
+        print(f"SDR manager {sdr_manager}")
+        self.config = config
+        print(f"Config manager {config}")
+        self.ham_bands = self.config.get_ham_bands()
+        print(f"ham_bands {self.ham_bands}")
+        self.freq_step = config.get_freq_step()
+        print(f"freq_step {self.freq_step}")
+        self.sample_rate = config.get_sample_rate()
+        print(f"sample_rate {self.sample_rate}")
+        self.runs_per_freq = config.get_runs_per_freq()
+        print(f"runs_per_freq {self.runs_per_freq}")
+        self.lite_mode = config.is_lite_mode()
+        print(f"lite_mode {self.lite_mode}")
         self.csv_writer = CSVWriter(self.lite_mode)
+        print(f"csv_writer {self.csv_writer}")
+        self.feature_extractor = FeatureExtractor(config)
+        print(f"feature_extractor {self.feature_extractor}")
         
         # Get min_db from config if available
-        if hasattr(config_manager.config, 'get'):
+        if hasattr(config.config, 'get'):
             # It's a ConfigParser object
-            self.min_db = float(config_manager.config.get('GENERAL', 'min_db', fallback='-40.0'))
+            self.min_db = float(config.config.get('GENERAL', 'min_db', fallback='-40.0'))
         else:
             # It's a dictionary
-            self.min_db = float(config_manager.config.get('min_db', -40.0))
+            self.min_db = float(config.config.get('min_db', -40.0))
         self.header_written = False
         self.header_lock = threading.Lock()
         self.pca = None
@@ -57,7 +67,7 @@ class Scanner:
             self.sdr_manager.set_center_freq(band_start)
             sample_size = 128 * 1024 if self.lite_mode else 256 * 1024
             iq_samples = self.sdr_manager.read_samples(sample_size)
-            features = extract_features(iq_samples, self.lite_mode)
+            features = self.feature_extractor.extract_features(iq_samples)
             pca_training_data.append(features)
 
         # Determine appropriate number of components
@@ -85,7 +95,7 @@ class Scanner:
                 self.sdr_manager.set_center_freq(current_freq)
                 sample_size = 128 * 1024 if self.lite_mode else 256 * 1024
                 iq_samples = self.sdr_manager.read_samples(sample_size)
-                features = extract_features(iq_samples, self.lite_mode)
+                features = self.feature_extractor.extract_features(iq_samples)
                 run_features.append(features)
 
             # Average features over runs
@@ -168,6 +178,6 @@ class Scanner:
         self.sdr_manager.set_center_freq(frequency)
         sample_size = 128 * 1024 if self.lite_mode else 256 * 1024
         iq_samples = self.sdr_manager.read_samples(sample_size)
-        signal_strength = calculate_signal_strength(iq_samples)
+        signal_strength = self.feature_extractor.calculate_signal_strength(iq_samples)
         
         return signal_strength > threshold_db

@@ -372,28 +372,7 @@ class SDRManager:
         except Exception as e:
             print(f"Error setting up stream: {e}")
             raise
-    
-    def _configure_rtlsdr_device(self):
-        """
-        Configure an RTL-SDR device with the specified parameters.
-        """
-        if self.sdr is None:
-            raise ValueError("RTL-SDR device not initialized")
-        
-        # Set sample rate
-        self.sdr.sample_rate = self.sample_rate
-        
-        # Set gain mode and gain
-        if self.gain == 'auto':
-            self.sdr.gain = 'auto'
-        else:
-            try:
-                gain_value = float(self.gain)
-                self.sdr.gain = gain_value
-            except Exception as e:
-                print(f"Error setting gain to {self.gain}: {e}")
-                self.sdr.gain = 'auto'
-    
+
     def set_center_freq(self, freq):
         """
         Set the center frequency of the SDR device.

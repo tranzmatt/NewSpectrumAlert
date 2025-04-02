@@ -15,8 +15,9 @@ from scanner import Scanner
 #from model_manager import ModelManager
 #from mqtt_client import MQTTClient
 #from gps_manager import GPSManager
-from feature_extraction import extract_features, calculate_signal_strength
-from spectrum_alert import create_spectrum_alert
+from feature_extraction import FeatureExtractor
+from spectrum_alert import SpectrumAlert
+from scanner import Scanner
 
 # Import numpy for test_sdr_manager
 # import numpy as np
@@ -84,8 +85,11 @@ def test_feature_extraction(config: ConfigManager):
     try:
 
         # Initialize SDR device using config
+        print(f"Acquiring SDRManager")
         sdr = SDRManager(config.config)
+        print(f"Initializing Device")
         sdr.initialize_device()
+        feature_extractor = FeatureExtractor(config)
         
         # Read some samples
         print("Reading samples for feature extraction...")
@@ -93,15 +97,15 @@ def test_feature_extraction(config: ConfigManager):
         samples = sdr.read_samples(1024 * 64)
         
         # Extract basic features
-        basic_features = extract_features(samples, lite_mode=True)
+        basic_features = feature_extractor.extract_basic_features(samples)
         print(f"Basic features: {basic_features}")
         
         # Extract enhanced features
-        enhanced_features = extract_features(samples, lite_mode=False)
+        enhanced_features = feature_extractor.extract_enhanced_features(samples)
         print(f"Enhanced features: {enhanced_features}")
         
         # Calculate signal strength
-        signal_strength = calculate_signal_strength(samples)
+        signal_strength = feature_extractor.calculate_signal_strength(samples)
         print(f"Signal strength: {signal_strength:.2f} dB")
         
         # Close the device
@@ -118,8 +122,10 @@ def test_scanner(config: ConfigManager):
         # Initialize SDR device with config
         sdr = SDRManager(config.config)
         sdr.initialize_device()
+        feature_extractor = FeatureExtractor(config)
         
         # Create scanner
+        print(f"Acquiring Scanner")
         scanner = Scanner(sdr, config)
         
         # Scan a specific band for a short duration
@@ -137,8 +143,8 @@ def test_scanner(config: ConfigManager):
             print(f"Scanning {current_freq/1e6:.2f} MHz...")
             sdr.set_center_freq(current_freq)
             iq_samples = sdr.read_samples(1024 * 64)
-            features = extract_features(iq_samples, config.is_lite_mode())
-            signal_strength = calculate_signal_strength(iq_samples)
+            features = feature_extractor.extract_features(iq_samples)
+            signal_strength = feature_extractor.calculate_signal_strength(iq_samples)
             print(f"Signal strength: {signal_strength:.2f} dB")
             current_freq += freq_step
             time.sleep(0.1)  # Brief pause to avoid hammering the CPU
@@ -150,19 +156,15 @@ def test_scanner(config: ConfigManager):
     except Exception as e:
         print(f"Error testing scanner: {e}")
 
-def test_spectrum_alert(config_file: str):
+def test_spectrum_alert(config: ConfigManager):
     """Test the SpectrumAlert main class."""
     print("\n=== Testing SpectrumAlert ===")
     
     try:
-        # Create a SpectrumAlert instance using real config
-        try:
-            spectrum_alert = create_spectrum_alert(config_file)
-            print(f"Using config from {config_file}")
-        except Exception as e:
-            print(f"Error loading config file: {e}")
-            raise
-        
+        spectrum_alert = SpectrumAlert(config)
+
+        print(f"Got SpectrumAlert: {spectrum_alert}")
+
         # Analyze a single frequency
         print("Analyzing 145 MHz...")
         results = spectrum_alert.analyze_single_frequency(145e6)
@@ -204,7 +206,7 @@ if __name__ == "__main__":
         elif test_name == 'scanner':
             test_scanner(config)
         elif test_name == 'spectrum':
-            test_spectrum_alert('config.ini')
+            test_spectrum_alert(config)
         else:
             print(f"Unknown test: {test_name}")
             print("Available tests: config, sdr, features, scanner, spectrum")

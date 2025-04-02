@@ -7,14 +7,14 @@ from scanner import Scanner
 from model_manager import ModelManager
 from mqtt_client import MQTTClient
 from gps_manager import GPSManager
-from feature_extraction import extract_features, calculate_signal_strength
+from feature_extraction import FeatureExtractor
 
 class SpectrumAlert:
     """
     Main class that coordinates all components of the SpectrumAlert system.
     """
     
-    def __init__(self, config_file='config.ini', lite_mode=False):
+    def __init__(self, config: ConfigManager):
         """
         Initialize the SpectrumAlert system.
         
@@ -22,20 +22,13 @@ class SpectrumAlert:
         config_file (str): Path to the configuration file
         lite_mode (bool): Whether to use lite mode for low-resource devices
         """
-        self.lite_mode = lite_mode
-        
-        # Initialize components
-        print("Initializing SpectrumAlert...")
-        
-        # Configuration
-        print("Loading configuration...")
-        self.config_manager = ConfigManager(config_file)
-        if lite_mode:
-            self.config_manager.set_lite_mode(True)
+        self.config = config
+        self.lite_mode = self.config.lite_mode
+        self.feature_extractor = FeatureExtractor(config)
         
         # SDR device
         print("Initializing SDR device...")
-        self.sdr_manager = SDRManager(self.config_manager.config)
+        self.sdr_manager = SDRManager(self.config.config)
         try:
             self.sdr_manager.initialize_device()
         except Exception as e:
@@ -45,17 +38,17 @@ class SpectrumAlert:
         # Scanner
         if self.sdr_manager:
             print("Initializing scanner...")
-            self.scanner = Scanner(self.sdr_manager, self.config_manager)
+            self.scanner = Scanner(self.sdr_manager, self.config)
         else:
             self.scanner = None
         
         # Model manager
         print("Initializing model manager...")
-        self.model_manager = ModelManager(lite_mode)
+        self.model_manager = ModelManager(self.config.lite_mode)
         
         # GPS manager
         print("Initializing GPS manager...")
-        receiver_lat, receiver_lon = self.config_manager.get_receiver_coordinates()
+        receiver_lat, receiver_lon = self.config.get_receiver_coordinates()
         self.gps_manager = GPSManager(
             default_lat=receiver_lat,
             default_lon=receiver_lon
@@ -64,7 +57,7 @@ class SpectrumAlert:
         
         # MQTT client
         print("Initializing MQTT client...")
-        mqtt_broker, mqtt_port, mqtt_topics = self.config_manager.get_mqtt_settings()
+        mqtt_broker, mqtt_port, mqtt_topics = self.config.get_mqtt_settings()
         self.mqtt_client = MQTTClient(
             broker=mqtt_broker,
             port=mqtt_port,
@@ -163,9 +156,9 @@ class SpectrumAlert:
         print("Starting spectrum monitoring...")
         
         # Get configuration
-        ham_bands = self.config_manager.get_ham_bands()
-        freq_step = self.config_manager.get_freq_step()
-        runs_per_freq = self.config_manager.get_runs_per_freq()
+        ham_bands = self.config.get_ham_bands()
+        freq_step = self.config.get_freq_step()
+        runs_per_freq = self.config.get_runs_per_freq()
         
         # Monitor loop
         try:
@@ -182,10 +175,10 @@ class SpectrumAlert:
                             iq_samples = self.sdr_manager.read_samples(sample_size)
                             
                             # Extract features
-                            features = extract_features(iq_samples, self.lite_mode)
+                            features = self.feature_extractor.extract_features(iq_samples)
                             
                             # Calculate signal strength
-                            signal_strength = calculate_signal_strength(iq_samples)
+                            signal_strength = self.feature_extractor.calculate_signal_strength(iq_samples)
                             
                             # Detect anomalies if model is available
                             is_anomaly = False
@@ -266,16 +259,16 @@ class SpectrumAlert:
         
         # Set frequency
         self.sdr_manager.set_center_freq(frequency)
-        
+
         # Read samples
         sample_size = 128 * 1024 if self.lite_mode else 256 * 1024
         iq_samples = self.sdr_manager.read_samples(sample_size)
         
         # Extract features
-        features = extract_features(iq_samples, self.lite_mode)
+        features = self.feature_extractor.extract_features(iq_samples)
         
         # Calculate signal strength
-        signal_strength = calculate_signal_strength(iq_samples)
+        signal_strength = self.feature_extractor.calculate_signal_strength(iq_samples)
         
         # Detect anomalies if model is available
         is_anomaly = False
@@ -321,15 +314,3 @@ class SpectrumAlert:
         
         print("Cleanup complete.")
 
-def create_spectrum_alert(config_file='config.ini', lite_mode=False):
-    """
-    Factory function to create a SpectrumAlert instance.
-    
-    Parameters:
-    config_file (str): Path to the configuration file
-    lite_mode (bool): Whether to use lite mode for low-resource devices
-    
-    Returns:
-    SpectrumAlert: Initialized SpectrumAlert instance
-    """
-    return SpectrumAlert(config_file, lite_mode)
