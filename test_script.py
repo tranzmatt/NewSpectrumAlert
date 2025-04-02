@@ -18,13 +18,13 @@ from gps_manager import GPSManager
 from feature_extraction import extract_features, calculate_signal_strength
 from spectrum_alert import create_spectrum_alert
 
-def test_config_manager():
+# Import numpy for test_sdr_manager
+import numpy as np
+
+def test_config_manager(config):
     """Test the ConfigManager module."""
     print("\n=== Testing ConfigManager ===")
-    
-    # Load the configuration
-    config = load_config('config.ini')
-    
+
     # Print configuration details
     print(f"HAM Bands: {config.get_ham_bands()}")
     print(f"Frequency Step: {config.get_freq_step()} Hz")
@@ -42,22 +42,11 @@ def test_config_manager():
     print(f"Runs per Frequency: {config.get_runs_per_freq()}")
     print(f"Lite Mode: {config.is_lite_mode()}")
 
-def test_sdr_manager():
+def test_sdr_manager(config: ConfigManager):
     """Test the SDRManager module."""
     print("\n=== Testing SDRManager ===")
     
     try:
-        # Load the actual config file
-        from config_manager import load_config
-        
-        # Try to load the config from file
-        try:
-            config = load_config('config.ini')
-            print("Using config from config.ini")
-        except Exception as e:
-            print(f"Error loading config file: {e}")
-            raise
-        
         # Initialize SDR device using config
         sdr = SDRManager(config.config)
         sdr.initialize_device()
@@ -88,22 +77,12 @@ def test_sdr_manager():
     except Exception as e:
         print(f"Error testing SDR manager: {e}")
 
-def test_feature_extraction():
+def test_feature_extraction(config: ConfigManager):
     """Test the feature extraction module."""
     print("\n=== Testing Feature Extraction ===")
     
     try:
-        # Load the actual config file
-        from config_manager import load_config
-        
-        # Try to load the config from file
-        try:
-            config = load_config('config.ini')
-            print("Using config from config.ini")
-        except Exception as e:
-            print(f"Error loading config file: {e}")
-            raise
-        
+
         # Initialize SDR device using config
         sdr = SDRManager(config.config)
         sdr.initialize_device()
@@ -130,22 +109,12 @@ def test_feature_extraction():
     except Exception as e:
         print(f"Error testing feature extraction: {e}")
 
-def test_scanner():
+def test_scanner(config: ConfigManager):
     """Test the Scanner module."""
     print("\n=== Testing Scanner ===")
     
     try:
-        # Load configuration
-        from config_manager import load_config
-        
-        # Try to load the config from file
-        try:
-            config = load_config('config.ini')
-            print("Using config from config.ini")
-        except Exception as e:
-            print(f"Error loading config file: {e}")
-            raise
-        
+
         # Initialize SDR device with config
         sdr = SDRManager(config.config)
         sdr.initialize_device()
@@ -181,15 +150,15 @@ def test_scanner():
     except Exception as e:
         print(f"Error testing scanner: {e}")
 
-def test_spectrum_alert():
+def test_spectrum_alert(config_file: str):
     """Test the SpectrumAlert main class."""
     print("\n=== Testing SpectrumAlert ===")
     
     try:
         # Create a SpectrumAlert instance using real config
         try:
-            spectrum_alert = create_spectrum_alert('config.ini')
-            print("Using config from config.ini")
+            spectrum_alert = create_spectrum_alert(config_file)
+            print(f"Using config from {config_file}")
         except Exception as e:
             print(f"Error loading config file: {e}")
             raise
@@ -214,28 +183,34 @@ def test_spectrum_alert():
         print(f"Error testing SpectrumAlert: {e}")
 
 if __name__ == "__main__":
-    # Import numpy for test_sdr_manager
-    import numpy as np
-    
+
+    # Try to load the config from file
+    try:
+        config = load_config('config.ini')
+        print("Using config from config.ini")
+    except Exception as e:
+        print(f"Error loading config file: {e}")
+        raise
+
     # Run tests based on command line arguments
     if len(sys.argv) > 1:
         test_name = sys.argv[1].lower()
         if test_name == 'config':
-            test_config_manager()
+            test_config_manager(config)
         elif test_name == 'sdr':
-            test_sdr_manager()
+            test_sdr_manager(config)
         elif test_name == 'features':
-            test_feature_extraction()
+            test_feature_extraction(config)
         elif test_name == 'scanner':
-            test_scanner()
+            test_scanner(config)
         elif test_name == 'spectrum':
-            test_spectrum_alert()
+            test_spectrum_alert('config.ini')
         else:
             print(f"Unknown test: {test_name}")
             print("Available tests: config, sdr, features, scanner, spectrum")
     else:
         # Run only the config test by default as it's the safest
-        test_config_manager()
+        test_config_manager(config)
         
         print("\nTo run other tests, specify the test name:")
         print("  python test_spectrum_alert.py config")
