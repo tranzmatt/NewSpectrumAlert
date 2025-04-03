@@ -1,4 +1,7 @@
 # data_collector.py
+from scanner import Scanner
+from gps_manager import GPSManager
+from config_manager import ConfigManager
 
 class DataCollector:
     """
@@ -6,15 +9,16 @@ class DataCollector:
     Designed for reuse in training, testing, and data labeling.
     """
 
-    def __init__(self, scanner, gps_manager=None, lite_mode=False):
+    def __init__(self, config: ConfigManager, scanner: Scanner, gps_manager: GPSManager):
         """
         :param scanner: Instance of Scanner for SDR access
         :param gps_manager: (Optional) Instance of GPSManager for location tagging
         :param lite_mode: If True, defaults to lighter data format
         """
+        self.config = config
         self.scanner = scanner
         self.gps_manager = gps_manager
-        self.lite_mode = lite_mode
+        self.lite_mode = self.config.lite_mode
 
     def gather_data_once(self, include_location=False):
         """

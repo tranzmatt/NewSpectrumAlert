@@ -10,6 +10,7 @@ from csv_writer import CSVWriter
 from config_manager import ConfigManager
 from sdr_manager import SDRManager
 
+STD_SAMPLE_SIZE = 128 * 1024
 
 class Scanner:
     """
@@ -25,23 +26,23 @@ class Scanner:
         config: Configuration manager
         """
         self.sdr_manager = sdr_manager
-        print(f"SDR manager {sdr_manager}")
+        print(f"Scanner SDR manager {sdr_manager}")
         self.config = config
-        print(f"Config manager {config}")
+        print(f"Scanner Config manager {config}")
         self.ham_bands = self.config.get_ham_bands()
-        print(f"ham_bands {self.ham_bands}")
+        print(f"Scanner ham_bands {self.ham_bands}")
         self.freq_step = config.get_freq_step()
-        print(f"freq_step {self.freq_step}")
+        print(f"Scanner freq_step {self.freq_step}")
         self.sample_rate = config.get_sample_rate()
-        print(f"sample_rate {self.sample_rate}")
+        print(f"Scanner sample_rate {self.sample_rate}")
         self.runs_per_freq = config.get_runs_per_freq()
-        print(f"runs_per_freq {self.runs_per_freq}")
+        print(f"Scanner runs_per_freq {self.runs_per_freq}")
         self.lite_mode = config.is_lite_mode()
-        print(f"lite_mode {self.lite_mode}")
+        print(f"Scanner lite_mode {self.lite_mode}")
         self.csv_writer = CSVWriter(self.lite_mode)
-        print(f"csv_writer {self.csv_writer}")
+        print(f"Scanner csv_writer {self.csv_writer}")
         self.feature_extractor = FeatureExtractor(config)
-        print(f"feature_extractor {self.feature_extractor}")
+        print(f"Scanner feature_extractor {self.feature_extractor}")
         
         # Get min_db from config if available
         if hasattr(config.config, 'get'):
@@ -53,30 +54,62 @@ class Scanner:
         self.header_written = False
         self.header_lock = threading.Lock()
         self.pca = None
-    
-    def initialize_pca(self, n_components=8):
+
+    def initialize_pca(self, n_components=8, min_samples=8, max_attempts=100):
         """
-        Initialize PCA for dimensionality reduction.
-        
+        Initialize PCA for dimensionality reduction using valid feature vectors
+        from multiple frequency bands.
+
         Parameters:
-        n_components (int): Number of components for PCA
+        n_components (int): Max number of PCA components (default: 8)
+        min_samples (int): Minimum number of valid samples required (default: 8)
+        max_attempts (int): Max total sampling attempts to avoid infinite loops
         """
-        # Collect initial data to fit PCA
+        print(f"🔍 Collecting at least {min_samples} valid samples to initialize PCA...")
         pca_training_data = []
-        for band_start, band_end in self.ham_bands:
-            self.sdr_manager.set_center_freq(band_start)
-            sample_size = 128 * 1024 if self.lite_mode else 256 * 1024
-            iq_samples = self.sdr_manager.read_samples(sample_size)
-            features = self.feature_extractor.extract_features(iq_samples)
-            pca_training_data.append(features)
+        attempts = 0
+        skipped = 0
 
-        # Determine appropriate number of components
+        while len(pca_training_data) < min_samples and attempts < max_attempts:
+            for band_start, band_end in self.ham_bands:
+                if len(pca_training_data) >= min_samples:
+                    break
+
+                self.sdr_manager.set_center_freq(band_start)
+                sample_size = STD_SAMPLE_SIZE
+                iq_samples = self.sdr_manager.read_samples(sample_size)
+
+                if iq_samples is None or len(iq_samples) == 0:
+                    print(f"⚠️ No IQ samples received for {band_start} Hz – skipping.")
+                    skipped += 1
+                    attempts += 1
+                    continue
+
+                features = self.feature_extractor.extract_features(iq_samples)
+
+                if np.isnan(features).any() or np.isinf(features).any():
+                    print(f"⚠️ Skipping invalid feature set at {band_start} Hz:", features)
+                    skipped += 1
+                    attempts += 1
+                    continue
+
+                pca_training_data.append(features)
+                attempts += 1
+
+        if len(pca_training_data) < min_samples:
+            raise ValueError(f"❌ PCA initialization failed: Only got {len(pca_training_data)} valid samples "
+                             f"after {attempts} attempts (min required: {min_samples}).")
+
+        # Set appropriate number of components
         num_features = len(pca_training_data[0])
-        n_components = min(n_components, len(pca_training_data), num_features)
+        adjusted_components = min(n_components, len(pca_training_data), num_features)
 
-        # Fit PCA
-        self.pca = PCA(n_components=n_components)
+        self.pca = PCA(n_components=adjusted_components)
         self.pca.fit(pca_training_data)
+
+        print(f"✅ PCA initialized with {len(pca_training_data)} samples "
+              f"({skipped} skipped), using {adjusted_components} components.")
+
 
     def scan_band(self, band_start, band_end, filename):
         """
@@ -93,7 +126,7 @@ class Scanner:
             run_features = []
             for _ in range(self.runs_per_freq):
                 self.sdr_manager.set_center_freq(current_freq)
-                sample_size = 128 * 1024 if self.lite_mode else 256 * 1024
+                sample_size = STD_SAMPLE_SIZE
                 iq_samples = self.sdr_manager.read_samples(sample_size)
                 features = self.feature_extractor.extract_features(iq_samples)
                 run_features.append(features)
@@ -110,7 +143,11 @@ class Scanner:
                 data = [current_freq] + avg_features.tolist()
             
             # Save to CSV
+            #print(f"Deactivating stream...")
+            self.sdr_manager.deactivate_stream()
             self.csv_writer.save_data_to_csv(data, filename)
+            #print(f"Activating stream...")
+            self.sdr_manager.activate_stream()
 
             # Move to the next frequency
             current_freq += self.freq_step
@@ -176,7 +213,7 @@ class Scanner:
             threshold_db = self.min_db
             
         self.sdr_manager.set_center_freq(frequency)
-        sample_size = 128 * 1024 if self.lite_mode else 256 * 1024
+        sample_size = STD_SAMPLE_SIZE
         iq_samples = self.sdr_manager.read_samples(sample_size)
         signal_strength = self.feature_extractor.calculate_signal_strength(iq_samples)
         

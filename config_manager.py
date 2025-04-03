@@ -1,6 +1,6 @@
-import configparser
 import os
 import sys
+from configparser import ConfigParser
 
 class ConfigManager:
     """
@@ -16,7 +16,7 @@ class ConfigManager:
         config_file (str): Path to the configuration file
         """
         self.config_file = config_file
-        self.config = configparser.ConfigParser()
+        self.config = ConfigParser()
         self.ham_bands = []
         self.freq_step = 0
         self.sample_rate = 0
@@ -63,10 +63,11 @@ class ConfigManager:
         self.sample_rate = float(self.config['GENERAL'].get('sample_rate', '2.048e6'))
         self.runs_per_freq = int(self.config['GENERAL'].get('runs_per_freq', '5'))
         self.sdr_type = self.config['GENERAL'].get('sdr_type', 'rtlsdr')
+        self.lite_mode = self.config['GENERAL'].getboolean('lite_mode', True)
         
         # Parse receiver settings
-        self.receiver_lat = float(self.config['RECEIVER'].get('latitude', '0'))
-        self.receiver_lon = float(self.config['RECEIVER'].get('longitude', '0'))
+        self.receiver_lat = float(os.getenv("GPS_FIX_LAT", self.config['RECEIVER'].get('latitude', '0')))
+        self.receiver_lon = float(os.getenv("GPS_FIX_LON", self.config['RECEIVER'].get('longitude', '0')))
         
         # Parse MQTT settings
         self.mqtt_broker = self.config['MQTT'].get('broker', 'localhost')

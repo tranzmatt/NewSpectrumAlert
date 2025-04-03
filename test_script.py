@@ -113,6 +113,7 @@ def test_feature_extraction(config: ConfigManager):
     except Exception as e:
         print(f"Error testing feature extraction: {e}")
 
+
 def test_scanner(config: ConfigManager):
     """Test the Scanner module."""
     print("\n=== Testing Scanner ===")
