@@ -175,7 +175,7 @@ class Scanner:
             for band_start, band_end in self.ham_bands:
                 self.scan_band(band_start, band_end, filename)
     
-    def gather_data(self, filename, duration_minutes, use_threading=True):
+    def timed_scan(self, filename, duration_minutes, use_threading=True):
         """
         Gather data for a specified duration.
         

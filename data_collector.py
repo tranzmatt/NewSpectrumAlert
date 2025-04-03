@@ -48,10 +48,76 @@ class DataCollector:
 
         print(f"Gathering data for {duration_minutes} minutes...")
         try:
-            self.scanner.gather_data(filename, duration_minutes, use_threading=True)
+            self.scanner.timed_scan(filename, duration_minutes, use_threading=True)
             print(f"Data gathering complete. Data saved to {filename}.")
             return True
         except Exception as e:
             print(f"Error gathering data: {e}")
             return False
+
+    # Main function for data gathering with parallel or sequential processing
+    def new_gather_data(sdr_class, config, filename, duration_minutes):
+        global header_written
+        header_written = False
+        start_time = time.time()
+        duration_seconds = duration_minutes * 60
+
+        sample_size = LITE_SAMPLE_SIZE if config.lite_mode else 256 * 1024
+
+        # Collect initial data to fit PCA
+        pca_training_data = []
+        sdr = sdr_class()
+        sdr.sample_rate = config.sample_rate
+
+        # Set device-specific parameters if available
+        if hasattr(sdr, 'gain') and hasattr(config, 'gain_value'):
+            sdr.gain = config.gain_value
+
+        # Set device serial if provided and supported
+        if config.device_serial != '-1' and hasattr(sdr, 'serial_number'):
+            sdr.serial_number = config.device_serial
+
+        # Set device index if provided and no serial is set
+        if config.device_serial == '-1' and config.device_index != '-1' and hasattr(sdr, 'device_index'):
+            sdr.device_index = int(config.device_index)
+
+        for band_start, band_end in config.ham_bands:
+            sdr.center_freq = band_start
+            iq_samples = sdr.read_samples(sample_size)
+            features = extract_features(iq_samples, config.lite_mode)
+            pca_training_data.append(features)
+        sdr.close()
+
+        # Initialize PCA for dimensionality reduction
+        num_features = len(pca_training_data[0])
+        n_components = min(2 if config.lite_mode else 8, len(pca_training_data), num_features)
+
+        pca = None
+        if config.lite_mode or n_components < num_features:
+            pca = PCA(n_components=n_components)
+            pca.fit(pca_training_data)
+
+        # Initialize anomaly detector for lite mode
+        anomaly_detector = None
+        if config.lite_mode:
+            anomaly_detector = IsolationForest(contamination=0.05, random_state=42)
+            anomaly_detector.fit(pca_training_data)
+
+        if config.lite_mode:
+            # Sequential scanning for lite mode (resource-optimized)
+            while time.time() - start_time < duration_seconds:
+                for band_start, band_end in config.ham_bands:
+                    scan_band(sdr_class, band_start, band_end, config, filename, pca)
+        else:
+            # Parallel scanning of bands for full mode
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for band_start, band_end in config.ham_bands:
+                    futures.append(executor.submit(
+                        scan_band, sdr_class, band_start, band_end, config, filename, pca
+                    ))
+
+                # Wait for all threads to finish
+                for future in futures:
+                    future.result()
 

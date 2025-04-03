@@ -89,19 +89,23 @@ def test_feature_extraction(config: ConfigManager):
         sdr = SDRManager(config.config)
         print(f"Initializing Device")
         sdr.initialize_device()
-        feature_extractor = FeatureExtractor(config)
-        
+
         # Read some samples
         print("Reading samples for feature extraction...")
         sdr.set_center_freq(145e6)  # 145 MHz
         samples = sdr.read_samples(1024 * 64)
-        
+
+        config.lite_mode = True
         # Extract basic features
-        basic_features = feature_extractor.extract_basic_features(samples)
+        feature_extractor = FeatureExtractor(config)
+        basic_features = feature_extractor.extract_features(samples)
         print(f"Basic features: {basic_features}")
-        
+
+
         # Extract enhanced features
-        enhanced_features = feature_extractor.extract_enhanced_features(samples)
+        config.lite_mode = False
+        feature_extractor = FeatureExtractor(config)
+        enhanced_features = feature_extractor.extract_features(samples)
         print(f"Enhanced features: {enhanced_features}")
         
         # Calculate signal strength
