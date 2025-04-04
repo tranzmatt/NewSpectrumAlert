@@ -10,10 +10,11 @@ import configparser
 import argparse
 import warnings
 
+
 # Function to check if a row looks like a header
 def is_header_row(row):
     """Check if a row likely contains headers rather than data"""
-    header_keywords = ['frequency', 'amplitude', 'mean', 'std', 'magnitude', 'fft', 
+    header_keywords = ['frequency', 'amplitude', 'mean', 'std', 'magnitude', 'fft',
                        'skew', 'kurt', 'phase', 'cyclo', 'entropy', 'papr',
                        'ratio', 'energy']
 
@@ -40,6 +41,7 @@ def is_header_row(row):
     # If more than half of the cells are non-numeric, likely a header
     return non_numeric > len(row) / 2
 
+
 # Improved function to handle loading CSV data into features
 def load_data_from_csv(filename):
     if not os.path.exists(filename):
@@ -48,43 +50,43 @@ def load_data_from_csv(filename):
     features = []
     headers = None
     header_rows_skipped = 0
-    
+
     print(f"Reading CSV file: {filename}")
     with open(filename, 'r') as f:
         # Read the first few lines to debug
         first_lines = [next(f) for _ in range(min(5, sum(1 for _ in open(filename))))]
         f.seek(0)  # Reset file pointer
-        
+
         print("First few lines of the file:")
         for i, line in enumerate(first_lines):
-            print(f"Line {i+1}: {line.strip()}")
-        
+            print(f"Line {i + 1}: {line.strip()}")
+
         # Reset file pointer again
         f.seek(0)
-        
+
         # Use CSV reader
         reader = csv.reader(f)
-        
+
         # Get header
         try:
             headers = next(reader)
             print(f"Headers detected: {headers}")
         except StopIteration:
             raise ValueError("CSV file is empty or cannot be read.")
-        
+
         # Process data rows
         line_number = 1
         for row in reader:
             line_number += 1
             if not row:  # Skip empty rows
                 continue
-                
+
             # Check if this row looks like another header
             if is_header_row(row):
                 header_rows_skipped += 1
                 warnings.warn(f"Skipping line {line_number} that appears to be another header: {row}")
                 continue
-                
+
             try:
                 # Skip frequency column (first column) and convert the rest to float
                 feature_values = [float(value) for value in row[1:]]
@@ -97,22 +99,24 @@ def load_data_from_csv(filename):
 
     if not features:
         raise ValueError("No valid feature data could be extracted from the file.")
-    
+
     print(f"Successfully loaded {len(features)} feature vectors")
     if header_rows_skipped > 0:
         print(f"Warning: Skipped {header_rows_skipped} rows that appeared to be headers")
-    print(f"Feature columns: {headers[1:]}") 
-    
+    print(f"Feature columns: {headers[1:]}")
+
     return np.array(features)
+
 
 # Function to load configuration
 def load_config(config_file='config.ini'):
     config = configparser.ConfigParser()
     config.read(config_file)
-    
+
     # Check if lite_mode is enabled
     lite_mode = config.getint('GENERAL', 'lite_mode', fallback=0)
     return config, lite_mode == 1
+
 
 # Unified function to train the RF fingerprinting model based on mode
 def train_rf_fingerprinting_model(features, lite_mode=False):
@@ -123,7 +127,7 @@ def train_rf_fingerprinting_model(features, lite_mode=False):
 
     # Different device simulation based on mode
     num_devices = 5 if lite_mode else 10
-    
+
     # Generate labels for the entire dataset
     if lite_mode:
         # For lite mode: Simulating 5 devices
@@ -139,7 +143,7 @@ def train_rf_fingerprinting_model(features, lite_mode=False):
     # Count samples per class for cross-validation
     class_counts = Counter(y_train)
     min_samples_per_class = min(class_counts.values())
-    
+
     # Determine max CV splits based on mode and class sizes
     if lite_mode:
         max_cv_splits = min(3, min_samples_per_class)
@@ -154,7 +158,7 @@ def train_rf_fingerprinting_model(features, lite_mode=False):
         # Simple RandomForestClassifier for lite mode
         model = RandomForestClassifier(
             n_estimators=50,  # Reduced number of trees for faster training
-            max_depth=10,     # Reduced depth for lower complexity
+            max_depth=10,  # Reduced depth for lower complexity
             random_state=42,
             class_weight='balanced'  # Add class weight to handle imbalance
         )
@@ -171,7 +175,7 @@ def train_rf_fingerprinting_model(features, lite_mode=False):
         }
         skf = StratifiedKFold(n_splits=max_cv_splits)
         grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=skf, n_jobs=-1, verbose=2)
-        
+
         print("Training the RF fingerprinting model with hyperparameter tuning...")
         grid_search.fit(X_train, y_train)
         model = grid_search.best_estimator_
@@ -200,12 +204,13 @@ def train_rf_fingerprinting_model(features, lite_mode=False):
 
     return model, anomaly_detector
 
+
 # Parse command line arguments
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Train RF fingerprinting and anomaly detection models')
     parser.add_argument('-c', '--config', type=str, default='config.ini',
                         help='Path to configuration file (default: config.ini)')
-    parser.add_argument('-i', '--input', type=str, 
+    parser.add_argument('-i', '--input', type=str,
                         help='Input CSV file containing training data (if not specified, determined by lite_mode)')
     parser.add_argument('-f', '--fingerprint', type=str,
                         help='Output file for fingerprinting model (if not specified, determined by lite_mode)')
@@ -213,16 +218,17 @@ def parse_arguments():
                         help='Output file for anomaly detection model (if not specified, determined by lite_mode)')
     return parser.parse_args()
 
+
 # Main execution
 if __name__ == "__main__":
     # Parse command line arguments
     args = parse_arguments()
-    
+
     # Load configuration to determine mode
     config, lite_mode = load_config(args.config)
     print(f"Using configuration file: {args.config}")
     print(f"Running in {'lite' if lite_mode else 'full'} mode")
-    
+
     # Determine input and output files based on arguments or lite_mode
     data_file = args.input
     if data_file is None:
@@ -232,7 +238,7 @@ if __name__ == "__main__":
     fingerprint_model_file = args.fingerprint
     if fingerprint_model_file is None:
         fingerprint_model_file = 'rf_fingerprinting_model_lite.pkl' if lite_mode else 'rf_fingerprinting_model.pkl'
-    
+
     anomaly_model_file = args.anomaly
     if anomaly_model_file is None:
         anomaly_model_file = 'anomaly_detection_model_lite.pkl' if lite_mode else 'anomaly_detection_model.pkl'
@@ -253,7 +259,7 @@ if __name__ == "__main__":
     if model is not None:
         joblib.dump(model, fingerprint_model_file)
         print(f"Model saved to {fingerprint_model_file}")
-    
+
     if anomaly_model is not None:
         joblib.dump(anomaly_model, anomaly_model_file)
         print(f"Anomaly detection model saved to {anomaly_model_file}")
