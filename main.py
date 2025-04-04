@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 import os
-import sys
-import shutil
-import time
+
 from spectrum_alert import create_spectrum_alert
 
 ASCII_LOGO = """
@@ -21,6 +19,7 @@ NORMAL_MODEL_FILE = "rf_fingerprinting_model.pkl"
 ANOMALY_MODEL_FILE = "anomaly_detection_model_lite.pkl"
 NORMAL_ANOMALY_MODEL_FILE = "anomaly_detection_model.pkl"
 
+
 def start_from_scratch():
     """Delete existing datasets and models."""
     # Delete Lite files
@@ -37,17 +36,18 @@ def start_from_scratch():
 
     print("Starting from scratch. All datasets and models have been deleted.")
 
+
 def automate_process(duration, lite_mode=False):
     """Automate data gathering, model training, and monitoring."""
     # Initialize SpectrumAlert
     spectrum_alert = create_spectrum_alert(lite_mode=lite_mode)
-    
+
     # Check for lite dataset and models
     if os.path.exists(DATA_FILE if lite_mode else NORMAL_DATA_FILE):
         print(f"Dataset found: {DATA_FILE if lite_mode else NORMAL_DATA_FILE}. Training the model...")
         spectrum_alert.train_models(DATA_FILE if lite_mode else NORMAL_DATA_FILE)
     elif os.path.exists(MODEL_FILE if lite_mode else NORMAL_MODEL_FILE) and \
-         os.path.exists(ANOMALY_MODEL_FILE if lite_mode else NORMAL_ANOMALY_MODEL_FILE):
+            os.path.exists(ANOMALY_MODEL_FILE if lite_mode else NORMAL_ANOMALY_MODEL_FILE):
         print(f"Models found. Starting monitor...")
         spectrum_alert.monitor()
     else:
@@ -55,14 +55,15 @@ def automate_process(duration, lite_mode=False):
         # Use the duration already provided
         if duration is None:
             duration = float(input("Enter the duration for data gathering (in minutes): "))
-        
+
         spectrum_alert.gather_data(duration)
-        
+
         print("Data gathering completed. Training the model...")
         spectrum_alert.train_models()
-        
+
         print("Model training completed. Starting monitor...")
         spectrum_alert.monitor()
+
 
 def main():
     while True:
@@ -82,7 +83,7 @@ def main():
         if choice == "1":
             version_choice = input("Do you want to run the lite version for Raspberry Pi? (y/n): ").lower()
             lite_mode = version_choice == 'y'
-            
+
             duration = float(input("Enter the duration for data gathering (in minutes): "))
             spectrum_alert = create_spectrum_alert(lite_mode=lite_mode)
             spectrum_alert.gather_data(duration)
@@ -90,25 +91,25 @@ def main():
         elif choice == "2":
             version_choice = input("Do you want to run the lite version for Raspberry Pi? (y/n): ").lower()
             lite_mode = version_choice == 'y'
-            
+
             spectrum_alert = create_spectrum_alert(lite_mode=lite_mode)
             spectrum_alert.train_models()
 
         elif choice == "3":
             version_choice = input("Do you want to run the lite version for Raspberry Pi? (y/n): ").lower()
             lite_mode = version_choice == 'y'
-            
+
             spectrum_alert = create_spectrum_alert(lite_mode=lite_mode)
             spectrum_alert.monitor()
 
         elif choice == "4":
             version_choice = input("Do you want to run the lite version for Raspberry Pi? (y/n): ").lower()
             lite_mode = version_choice == 'y'
-            
+
             # Get the duration before automating the process
             duration = float(input("Enter the duration for data gathering (in minutes): "))
             print("Automating process: Gather Data -> Train Model -> Monitor Spectrum")
-            
+
             spectrum_alert = create_spectrum_alert(lite_mode=lite_mode)
             spectrum_alert.gather_data(duration)
             spectrum_alert.train_models()
@@ -117,7 +118,7 @@ def main():
         elif choice == "5":
             version_choice = input("Do you want to run the lite version for Raspberry Pi? (y/n): ").lower()
             lite_mode = version_choice == 'y'
-            
+
             print("Checking for existing dataset or model...")
             automate_process(None, lite_mode)
 
@@ -131,6 +132,7 @@ def main():
 
         else:
             print("Invalid choice. Please try again.\n")
+
 
 if __name__ == "__main__":
     main()

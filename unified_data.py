@@ -5,17 +5,10 @@ This script collects data from SDR and saves it to a CSV file.
 """
 
 import argparse
-import os
-import sys
-import time
-from concurrent.futures import ThreadPoolExecutor
 
-from config_manager import ConfigManager, load_config
-from sdr_manager import SDRManager
+from config_manager import load_config
 from scanner import Scanner
-from feature_extraction import FeatureExtractor
-from gps_manager import GPSManager
-from csv_writer import CSVWriter
+from sdr_manager import SDRManager
 
 
 def scan_band(scanner, band_start, band_end, freq_step, filename):

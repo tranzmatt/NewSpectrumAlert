@@ -1,12 +1,12 @@
 import argparse
-import configparser
 import sys
 
+from config_manager import load_config
 from data_collector import DataCollector
-from scanner import Scanner
-from config_manager import ConfigManager, load_config
-from sdr_manager import SDRManager
 from gps_manager import GPSManager
+from scanner import Scanner
+from sdr_manager import SDRManager
+
 
 def main():
     parser = argparse.ArgumentParser(description="Lite SDR Data Collector")
@@ -48,4 +48,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

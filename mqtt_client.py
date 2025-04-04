@@ -1,17 +1,17 @@
-import paho.mqtt.client as mqtt
-import os
 import json
-import time
-import socket
-import subprocess
+import os
 import re
-import threading
+import subprocess
+import time
+
+import paho.mqtt.client as mqtt
+
 
 class MQTTClient:
     """
     MQTT client for publishing monitoring data and receiving commands.
     """
-    
+
     def __init__(self, broker='localhost', port=1883, topics=None, client_id=None):
         """
         Initialize the MQTT client.
@@ -37,14 +37,14 @@ class MQTTClient:
         self.max_reconnect_delay = 60  # Maximum reconnect delay in seconds
         self.stopping = False
         self.command_handlers = {}
-        
+
         # Environmental variables
         self.mqtt_user = os.getenv("MQTT_USER", None)
         self.mqtt_password = os.getenv("MQTT_PASSWORD", None)
         self.mqtt_tls = int(os.getenv("MQTT_TLS", 0))  # 1 = Enable TLS, 0 = Disable
         self.mqtt_use_ca_cert = int(os.getenv("MQTT_USE_CA_CERT", 0))  # 1 = Use CA Cert, 0 = Disable
         self.mqtt_ca_cert = os.getenv("MQTT_CA_CERT", "/path/to/ca.crt")  # Path to CA Cert
-    
+
     def get_device_name(self):
         """
         Get a unique device name for MQTT client ID.
@@ -55,23 +55,23 @@ class MQTTClient:
         """
         # Check for Balena device name
         device_name = os.getenv("BALENA_DEVICE_NAME_AT_INIT")
-        
+
         if not device_name:
             try:
                 # Get hostname
                 host = subprocess.check_output("hostname", shell=True, text=True).strip()
-                
+
                 # Get MAC address
                 mac = self.get_primary_mac()
-                
+
                 device_name = f"{host}-{mac}"
             except Exception as e:
                 print(f"Error getting device name: {e}")
                 # Fallback to a random name
                 device_name = f"spectrumAlert-{int(time.time())}"
-        
+
         return device_name
-    
+
     def get_primary_mac(self):
         """
         Get the primary MAC address (uppercase, no colons).
@@ -94,16 +94,16 @@ class MQTTClient:
                 # Fallback method using socket and uuid
                 import uuid
                 mac_output = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff)
-                                      for elements in range(0, 48, 8)][::-1])
-            
+                                       for elements in range(0, 48, 8)][::-1])
+
             # Remove colons and convert to uppercase
             mac_clean = re.sub(r'[:]', '', mac_output).upper()
-            
+
             return mac_clean
         except Exception as e:
             print(f"Error getting MAC address: {e}")
             return "UNKNOWNMAC"
-    
+
     def connect(self):
         """
         Connect to the MQTT broker.
@@ -112,39 +112,39 @@ class MQTTClient:
         bool: True if connection successful, False otherwise
         """
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.client_id)
-        
+
         # Set up callbacks
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
-        
+
         # Enable automatic reconnect
         self.client.reconnect_delay_set(min_delay=1, max_delay=30)
-        
+
         # Use TLS if enabled
         if self.mqtt_tls:
             print(f"Enabling TLS for MQTT...")
             self.client.tls_set(ca_certs=self.mqtt_ca_cert if self.mqtt_use_ca_cert else None)
-        
+
         # Set username/password if provided
         if self.mqtt_user and self.mqtt_password:
             self.client.username_pw_set(self.mqtt_user, self.mqtt_password)
-        
+
         try:
             self.client.connect(self.broker, self.port, 60)
             self.client.loop_start()
-            
+
             # Wait for connection to establish
             timeout = 5  # seconds
             start_time = time.time()
             while not self.connected and time.time() - start_time < timeout:
                 time.sleep(0.1)
-            
+
             return self.connected
         except Exception as e:
             print(f"MQTT connection error: {e}")
             return False
-    
+
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         """
         Callback for when the client connects to the broker.
@@ -159,14 +159,14 @@ class MQTTClient:
         if rc == 0:
             print("Connected to MQTT broker successfully!")
             self.connected = True
-            
+
             # Subscribe to command topics if any
             for topic in self.command_handlers.keys():
                 self.client.subscribe(topic)
         else:
             print(f"Failed to connect to MQTT broker, return code: {rc}")
             self.connected = False
-    
+
     def _on_disconnect(self, client, userdata, rc, *args):
         """
         Callback for when the client disconnects from the broker.
@@ -178,7 +178,7 @@ class MQTTClient:
         """
         print(f"Disconnected from MQTT broker with code: {rc}")
         self.connected = False
-        
+
         if not self.stopping:
             # Try to reconnect if not stopping intentionally
             print("Attempting to reconnect...")
@@ -186,7 +186,7 @@ class MQTTClient:
                 self.client.reconnect()
             except Exception as e:
                 print(f"Reconnect failed: {e}")
-    
+
     def _on_message(self, client, userdata, msg):
         """
         Callback for when a message is received from the broker.
@@ -199,7 +199,7 @@ class MQTTClient:
         try:
             topic = msg.topic
             payload = msg.payload.decode('utf-8')
-            
+
             if topic in self.command_handlers:
                 handler = self.command_handlers[topic]
                 handler(payload)
@@ -207,7 +207,7 @@ class MQTTClient:
                 print(f"Received message on topic {topic}: {payload}")
         except Exception as e:
             print(f"Error processing message: {e}")
-    
+
     def publish(self, message_type, payload):
         """
         Publish a message to the appropriate topic.
@@ -222,24 +222,24 @@ class MQTTClient:
         if not self.connected:
             print("Not connected to MQTT broker. Cannot publish message.")
             return False
-        
+
         if message_type not in self.topics:
             print(f"Unknown message type: {message_type}")
             return False
-        
+
         topic = self.topics[message_type]
-        
+
         # Convert dict/object to JSON string
         if isinstance(payload, (dict, list)):
             payload = json.dumps(payload)
-        
+
         try:
             result = self.client.publish(topic, payload)
             return result.rc == mqtt.MQTT_ERR_SUCCESS
         except Exception as e:
             print(f"Error publishing message: {e}")
             return False
-    
+
     def publish_anomaly(self, frequency, features=None, confidence=None):
         """
         Publish an anomaly detection message.
@@ -258,15 +258,15 @@ class MQTTClient:
             "frequency_mhz": frequency / 1e6,
             "device_id": self.client_id
         }
-        
+
         if features is not None:
             payload["features"] = features
-        
+
         if confidence is not None:
             payload["confidence"] = confidence
-        
+
         return self.publish('anomalies', payload)
-    
+
     def publish_signal_strength(self, frequency, strength_db):
         """
         Publish a signal strength measurement.
@@ -285,9 +285,9 @@ class MQTTClient:
             "strength_db": strength_db,
             "device_id": self.client_id
         }
-        
+
         return self.publish('signal_strength', payload)
-    
+
     def publish_coordinates(self, latitude, longitude, altitude=None):
         """
         Publish receiver coordinates.
@@ -306,12 +306,12 @@ class MQTTClient:
             "longitude": longitude,
             "device_id": self.client_id
         }
-        
+
         if altitude is not None:
             payload["altitude"] = altitude
-        
+
         return self.publish('coordinates', payload)
-    
+
     def register_command_handler(self, topic, handler):
         """
         Register a handler for a command topic.
@@ -322,13 +322,13 @@ class MQTTClient:
         """
         if not callable(handler):
             raise ValueError("Handler must be callable")
-        
+
         self.command_handlers[topic] = handler
-        
+
         # Subscribe to the topic if already connected
         if self.connected and self.client:
             self.client.subscribe(topic)
-    
+
     def disconnect(self):
         """
         Disconnect from the MQTT broker.

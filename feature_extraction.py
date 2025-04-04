@@ -86,10 +86,8 @@ class FeatureExtractor:
             spectral_entropy, papr, band_energy_ratio
         ]
 
-
     # Function to calculate signal strength (simplified)
     def calculate_signal_strength(self, iq_data):
         amplitude = np.abs(iq_data)
         signal_strength_db = 10 * np.log10(np.mean(amplitude ** 2))
         return signal_strength_db
-

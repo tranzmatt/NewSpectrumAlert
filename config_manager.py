@@ -1,13 +1,13 @@
 import os
-import sys
 from configparser import ConfigParser
+
 
 class ConfigManager:
     """
     Centralized configuration management for SpectrumAlert.
     Handles reading, validating, and providing access to configuration parameters.
     """
-    
+
     def __init__(self, config_file='config.ini'):
         """
         Initialize the configuration manager.
@@ -28,10 +28,10 @@ class ConfigManager:
         self.mqtt_topics = {}
         self.sdr_type = "rtlsdr"
         self.lite_mode = False
-        
+
         # Load the configuration
         self.load_config()
-    
+
     def load_config(self):
         """
         Load and parse the configuration file.
@@ -42,33 +42,33 @@ class ConfigManager:
         """
         if not os.path.exists(self.config_file):
             raise FileNotFoundError(f"Configuration file '{self.config_file}' not found.")
-        
+
         self.config.read(self.config_file)
-        
+
         # Validate required sections
         required_sections = ['HAM_BANDS', 'GENERAL', 'RECEIVER', 'MQTT']
         for section in required_sections:
             if section not in self.config:
                 raise ValueError(f"Required section '{section}' missing in the configuration file.")
-        
+
         # Parse HAM bands
         self.parse_ham_bands()
 
         # SDR Settings
         self.device_serial = self.config['GENERAL'].get('device_serial', '-1')
         self.device_index = self.config['GENERAL'].get('device_index', '-1')
-        
+
         # Parse general settings
         self.freq_step = float(self.config['GENERAL'].get('freq_step', '500e3'))
         self.sample_rate = float(self.config['GENERAL'].get('sample_rate', '2.048e6'))
         self.runs_per_freq = int(self.config['GENERAL'].get('runs_per_freq', '5'))
         self.sdr_type = self.config['GENERAL'].get('sdr_type', 'rtlsdr')
         self.lite_mode = self.config['GENERAL'].getboolean('lite_mode', True)
-        
+
         # Parse receiver settings
         self.receiver_lat = float(os.getenv("GPS_FIX_LAT", self.config['RECEIVER'].get('latitude', '0')))
         self.receiver_lon = float(os.getenv("GPS_FIX_LON", self.config['RECEIVER'].get('longitude', '0')))
-        
+
         # Parse MQTT settings
         self.mqtt_broker = self.config['MQTT'].get('broker', 'localhost')
         self.mqtt_port = int(self.config['MQTT'].get('port', '1883'))
@@ -78,7 +78,7 @@ class ConfigManager:
             'signal_strength': self.config['MQTT'].get('topic_signal_strength', 'hamradio/signal_strength'),
             'coordinates': self.config['MQTT'].get('topic_coordinates', 'hamradio/coordinates')
         }
-    
+
     def parse_ham_bands(self):
         """
         Parse the HAM bands from the configuration.
@@ -89,7 +89,7 @@ class ConfigManager:
         ham_bands_str = self.config['HAM_BANDS'].get('bands', None)
         if ham_bands_str is None:
             raise ValueError("Missing 'bands' entry in 'HAM_BANDS' section.")
-        
+
         self.ham_bands = []
         for band in ham_bands_str.split(','):
             try:
@@ -97,7 +97,7 @@ class ConfigManager:
                 self.ham_bands.append((float(start), float(end)))
             except ValueError:
                 raise ValueError(f"Invalid frequency range format: {band}. Expected 'start-end'.")
-    
+
     def set_lite_mode(self, enabled=True):
         """
         Enable or disable lite mode for low-resource devices.
@@ -109,32 +109,32 @@ class ConfigManager:
         if enabled:
             # Override some settings for lite mode
             self.sample_rate = min(self.sample_rate, 1.024e6)  # Reduced sample rate
-            self.runs_per_freq = min(self.runs_per_freq, 3)    # Fewer runs per frequency
-    
+            self.runs_per_freq = min(self.runs_per_freq, 3)  # Fewer runs per frequency
+
     def get_ham_bands(self):
         """Get the parsed HAM bands."""
         return self.ham_bands
-    
+
     def get_freq_step(self):
         """Get the frequency step."""
         return self.freq_step
-    
+
     def get_sample_rate(self):
         """Get the sample rate."""
         return self.sample_rate
-    
+
     def get_runs_per_freq(self):
         """Get the number of runs per frequency."""
         return self.runs_per_freq
-    
+
     def get_receiver_coordinates(self):
         """Get the receiver coordinates (latitude, longitude)."""
         return (self.receiver_lat, self.receiver_lon)
-    
+
     def get_mqtt_settings(self):
         """Get the MQTT settings (broker, port, topics)."""
         return (self.mqtt_broker, self.mqtt_port, self.mqtt_topics)
-    
+
     def get_sdr_type(self):
         """Get the SDR type."""
         return self.sdr_type
@@ -142,7 +142,7 @@ class ConfigManager:
     def get_device_serial(self):
         """Get the SDR device_serial."""
         return self.device_serial
-    
+
     def get_device_index(self):
         """Get the SDR device_index."""
         return self.device_index
@@ -150,7 +150,7 @@ class ConfigManager:
     def is_lite_mode(self):
         """Check if lite mode is enabled."""
         return self.lite_mode
-    
+
     def get_all_settings(self):
         """
         Get all configuration settings as a dictionary.
@@ -171,6 +171,7 @@ class ConfigManager:
             'sdr_type': self.sdr_type,
             'lite_mode': self.lite_mode
         }
+
 
 def load_config(config_file='config.ini', lite_mode=False):
     """

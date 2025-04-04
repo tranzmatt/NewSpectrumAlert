@@ -1,7 +1,8 @@
 # data_collector.py
-from scanner import Scanner
-from gps_manager import GPSManager
 from config_manager import ConfigManager
+from gps_manager import GPSManager
+from scanner import Scanner
+
 
 class DataCollector:
     """
@@ -120,4 +121,3 @@ class DataCollector:
                 # Wait for all threads to finish
                 for future in futures:
                     future.result()
-

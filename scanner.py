@@ -1,20 +1,21 @@
-import numpy as np
-import time
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
+
+import numpy as np
 from sklearn.decomposition import PCA
 
-from feature_extraction import FeatureExtractor
-
-from csv_writer import CSVWriter
 from config_manager import ConfigManager
+from csv_writer import CSVWriter
+from feature_extraction import FeatureExtractor
 from sdr_manager import SDRManager
+
 
 class Scanner:
     """
     A class for scanning frequency bands and collecting signal data.
     """
-    
+
     def __init__(self, sdr_manager: SDRManager, config: ConfigManager):
         """
         Initialize the scanner.
@@ -43,7 +44,7 @@ class Scanner:
         print(f"Scanner feature_extractor {self.feature_extractor}")
 
         self.sample_size = 128 * 1024 if self.lite_mode else 256 * 1024
-        
+
         # Get min_db from config if available
         if hasattr(config.config, 'get'):
             # It's a ConfigParser object
@@ -141,7 +142,7 @@ class Scanner:
         filename (str): CSV file to save the data
         """
         current_freq = band_start
-        
+
         while current_freq <= band_end:
             run_features = []
             for _ in range(self.runs_per_freq):
@@ -152,7 +153,7 @@ class Scanner:
 
             # Average features over runs
             avg_features = np.mean(run_features, axis=0)
-            
+
             # Apply PCA if initialized
             if self.pca is not None:
                 with threading.Lock():
@@ -160,17 +161,17 @@ class Scanner:
                 data = [current_freq] + reduced_features.tolist()
             else:
                 data = [current_freq] + avg_features.tolist()
-            
+
             # Save to CSV
-            #print(f"Deactivating stream...")
+            # print(f"Deactivating stream...")
             self.sdr_manager.deactivate_stream()
             self.csv_writer.save_data_to_csv(data, filename)
-            #print(f"Activating stream...")
+            # print(f"Activating stream...")
             self.sdr_manager.activate_stream()
 
             # Move to the next frequency
             current_freq += self.freq_step
-    
+
     def scan_all_bands(self, filename, use_threading=True):
         """
         Scan all configured frequency bands.
@@ -186,14 +187,14 @@ class Scanner:
                     futures.append(
                         executor.submit(self.scan_band, band_start, band_end, filename)
                     )
-                
+
                 # Wait for all threads to finish
                 for future in futures:
                     future.result()
         else:
             for band_start, band_end in self.ham_bands:
                 self.scan_band(band_start, band_end, filename)
-    
+
     def timed_scan(self, filename, duration_minutes, use_threading=True):
         """
         Gather data for a specified duration.
@@ -205,18 +206,18 @@ class Scanner:
         """
         start_time = time.time()
         duration_seconds = duration_minutes * 60
-        
+
         # Initialize PCA if not already initialized
         if self.pca is None:
             self.initialize_pca()
-        
+
         # Keep scanning until the duration is reached
         while time.time() - start_time < duration_seconds:
             self.scan_all_bands(filename, use_threading)
-            
+
             # Sleep briefly to avoid hammering the CPU
             time.sleep(0.1)
-    
+
     def detect_signal(self, frequency, threshold_db=None):
         """
         Detect if a signal is present at a given frequency.
@@ -230,9 +231,9 @@ class Scanner:
         """
         if threshold_db is None:
             threshold_db = self.min_db
-            
+
         self.sdr_manager.set_center_freq(frequency)
         iq_samples = self.sdr_manager.read_samples(self.sample_size)
         signal_strength = self.feature_extractor.calculate_signal_strength(iq_samples)
-        
+
         return signal_strength > threshold_db

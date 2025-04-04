@@ -1,14 +1,15 @@
+import argparse
+import configparser
+import csv
+import os
+import warnings
+from collections import Counter
+
+import joblib
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, IsolationForest
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score, StratifiedKFold
 from sklearn.metrics import accuracy_score, classification_report
-from collections import Counter
-import joblib
-import os
-import csv
-import configparser
-import argparse
-import warnings
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score, StratifiedKFold
 
 
 # Function to check if a row looks like a header

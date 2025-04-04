@@ -4,20 +4,19 @@ Test script for the SpectrumAlert refactored module.
 This demonstrates how to use the new modules independently and together.
 """
 
-import os
-import time
 import sys
+import time
 
 # Import refactored modules
 from config_manager import ConfigManager, load_config
-from sdr_manager import SDRManager, get_sdr_device
-from scanner import Scanner
-#from model_manager import ModelManager
-#from mqtt_client import MQTTClient
-#from gps_manager import GPSManager
+# from model_manager import ModelManager
+# from mqtt_client import MQTTClient
+# from gps_manager import GPSManager
 from feature_extraction import FeatureExtractor
-from spectrum_alert import SpectrumAlert
 from scanner import Scanner
+from sdr_manager import SDRManager
+from spectrum_alert import SpectrumAlert
+
 
 # Import numpy for test_sdr_manager
 # import numpy as np
@@ -35,7 +34,7 @@ def test_config_manager(config):
     print(f"MQTT Settings: {config.get_mqtt_settings()}")
     print(f"SDR Type: {config.get_sdr_type()}")
     print(f"Lite Mode: {config.is_lite_mode()}")
-    
+
     # Test setting lite mode
     config.set_lite_mode(True)
     print(f"After setting lite mode:")
@@ -43,15 +42,16 @@ def test_config_manager(config):
     print(f"Runs per Frequency: {config.get_runs_per_freq()}")
     print(f"Lite Mode: {config.is_lite_mode()}")
 
+
 def test_sdr_manager(config: ConfigManager):
     """Test the SDRManager module."""
     print("\n=== Testing SDRManager ===")
-    
+
     try:
         # Initialize SDR device using config
         sdr = SDRManager(config.config)
         sdr.initialize_device()
-        
+
         # Print device info
         print(f"Using SDR type: {sdr.sdr_type}")
         print(f"Sample rate: {sdr.sample_rate} Hz")
@@ -60,28 +60,29 @@ def test_sdr_manager(config: ConfigManager):
             print(f"Device serial: {sdr.device_serial}")
         if sdr.device_index is not None:
             print(f"Device index: {sdr.device_index}")
-        
+
         # Read some samples
         print("Reading samples...")
         sdr.set_center_freq(145e6)  # 145 MHz
         samples = sdr.read_samples(1024 * 64)
-        
+
         # Calculate some basic statistics
         import numpy as np
-        signal_strength = 10 * np.log10(np.mean(np.abs(samples)**2))
+        signal_strength = 10 * np.log10(np.mean(np.abs(samples) ** 2))
         print(f"Read {len(samples)} samples at 145 MHz")
         print(f"Signal strength: {signal_strength:.2f} dB")
-        
+
         # Close the device
         sdr.close()
         print("SDR device closed")
     except Exception as e:
         print(f"Error testing SDR manager: {e}")
 
+
 def test_feature_extraction(config: ConfigManager):
     """Test the feature extraction module."""
     print("\n=== Testing Feature Extraction ===")
-    
+
     try:
 
         # Initialize SDR device using config
@@ -101,17 +102,16 @@ def test_feature_extraction(config: ConfigManager):
         basic_features = feature_extractor.extract_features(samples)
         print(f"Basic features: {basic_features}")
 
-
         # Extract enhanced features
         config.lite_mode = False
         feature_extractor = FeatureExtractor(config)
         enhanced_features = feature_extractor.extract_features(samples)
         print(f"Enhanced features: {enhanced_features}")
-        
+
         # Calculate signal strength
         signal_strength = feature_extractor.calculate_signal_strength(samples)
         print(f"Signal strength: {signal_strength:.2f} dB")
-        
+
         # Close the device
         sdr.close()
     except Exception as e:
@@ -121,31 +121,31 @@ def test_feature_extraction(config: ConfigManager):
 def test_scanner(config: ConfigManager):
     """Test the Scanner module."""
     print("\n=== Testing Scanner ===")
-    
+
     try:
 
         # Initialize SDR device with config
         sdr = SDRManager(config.config)
         sdr.initialize_device()
         feature_extractor = FeatureExtractor(config)
-        
+
         # Create scanner
         print(f"Acquiring Scanner")
         scanner = Scanner(sdr, config)
-        
+
         # Scan a specific band for a short duration
         print("Scanning 144-146 MHz band for 10 seconds...")
-        
+
         # We'll simulate this by only processing the first few frequencies
         band_start, band_end = 144e6, 146e6
         current_freq = band_start
         freq_step = config.get_freq_step()
-        
+
         start_time = time.time()
         end_time = start_time + 10  # 10 seconds
-        
+
         while time.time() < end_time and current_freq <= band_end:
-            print(f"Scanning {current_freq/1e6:.2f} MHz...")
+            print(f"Scanning {current_freq / 1e6:.2f} MHz...")
             sdr.set_center_freq(current_freq)
             iq_samples = sdr.read_samples(1024 * 64)
             features = feature_extractor.extract_features(iq_samples)
@@ -153,18 +153,19 @@ def test_scanner(config: ConfigManager):
             print(f"Signal strength: {signal_strength:.2f} dB")
             current_freq += freq_step
             time.sleep(0.1)  # Brief pause to avoid hammering the CPU
-        
+
         print("Scanning complete")
-        
+
         # Close the device
         sdr.close()
     except Exception as e:
         print(f"Error testing scanner: {e}")
 
+
 def test_spectrum_alert(config: ConfigManager):
     """Test the SpectrumAlert main class."""
     print("\n=== Testing SpectrumAlert ===")
-    
+
     try:
         spectrum_alert = SpectrumAlert(config)
 
@@ -173,7 +174,7 @@ def test_spectrum_alert(config: ConfigManager):
         # Analyze a single frequency
         print("Analyzing 145 MHz...")
         results = spectrum_alert.analyze_single_frequency(145e6)
-        
+
         if results:
             print(f"Frequency: {results['frequency_mhz']:.2f} MHz")
             print(f"Signal strength: {results['signal_strength_db']:.2f} dB")
@@ -182,12 +183,13 @@ def test_spectrum_alert(config: ConfigManager):
                 print(f"Anomaly score: {results['anomaly_score']:.4f}")
             if results['device_id']:
                 print(f"Device: {results['device_id']} (confidence: {results['device_confidence']:.2f})")
-        
+
         # Clean up
         spectrum_alert.cleanup()
         print("SpectrumAlert cleanup complete")
     except Exception as e:
         print(f"Error testing SpectrumAlert: {e}")
+
 
 if __name__ == "__main__":
 
@@ -218,7 +220,7 @@ if __name__ == "__main__":
     else:
         # Run only the config test by default as it's the safest
         test_config_manager(config)
-        
+
         print("\nTo run other tests, specify the test name:")
         print("  python test_spectrum_alert.py config")
         print("  python test_spectrum_alert.py sdr")

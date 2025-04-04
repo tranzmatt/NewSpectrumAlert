@@ -1,10 +1,7 @@
-import importlib
-import sys
-import os
 import time
-import numpy as np
-
 from configparser import ConfigParser
+
+import numpy as np
 
 
 class SDRManager:
@@ -339,7 +336,7 @@ class SDRManager:
                                 gain_range = self.sdr.getGainRange(self.SOAPY_SDR_RX, 0, elem)
                                 normalized_gain = float(self.gain) / 100.0  # Normalize to 0-1
                                 elem_gain = gain_range.minimum() + normalized_gain * (
-                                            gain_range.maximum() - gain_range.minimum())
+                                        gain_range.maximum() - gain_range.minimum())
                                 self.sdr.setGain(self.SOAPY_SDR_RX, 0, elem, elem_gain)
                                 print(f"Set {elem} gain to {elem_gain} dB")
                             except Exception as e2:
@@ -480,7 +477,7 @@ class SDRManager:
 
             # If we read any samples, return them
             if total_samples > 0:
-                #print(f"Successfully read {total_samples} samples")
+                # print(f"Successfully read {total_samples} samples")
                 return buffer[:total_samples]
 
             # If we could not read any samples with SoapySDR after all attempts,
@@ -587,11 +584,10 @@ class SDRManager:
         except Exception as e:
             print(f"Error during device cleanup: {e}")
 
-
     def deactivate_stream(self):
         if hasattr(self, 'rx_stream') and self.rx_stream:
             self.sdr.deactivateStream(self.rx_stream)
-            #print("🔌 SDR stream deactivated.")
+            # print("🔌 SDR stream deactivated.")
 
     def activate_stream(self):
         if hasattr(self, 'rx_stream') and self.rx_stream:
@@ -601,7 +597,7 @@ class SDRManager:
                 self.sdr.readStream(self.rx_stream, [flush_buffer], len(flush_buffer))
             time.sleep(0.01)  # brief pause before reactivating
             self.sdr.activateStream(self.rx_stream)
-            #print("🔌 SDR stream reactivated.")
+            # print("🔌 SDR stream reactivated.")
 
 
 def get_sdr_device(config):

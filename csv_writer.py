@@ -6,6 +6,7 @@ import time
 # Thread lock for safe file access
 file_lock = threading.Lock()
 
+
 class CSVWriter:
 
     def __init__(self, lite_mode=True):
@@ -75,5 +76,5 @@ class CSVWriter:
 
                 writer.writerow(data)
 
-        print(f"Data saved to {filename}: {data[0]/1e6:.3f} MHz")
+        print(f"Data saved to {filename}: {data[0] / 1e6:.3f} MHz")
         time.sleep(1)  # Short delay to prevent overwhelming the system

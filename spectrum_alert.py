@@ -1,19 +1,19 @@
-import os
 import time
-import sys
+
 from config_manager import ConfigManager
-from sdr_manager import SDRManager
-from scanner import Scanner
+from feature_extraction import FeatureExtractor
+from gps_manager import GPSManager
 from model_manager import ModelManager
 from mqtt_client import MQTTClient
-from gps_manager import GPSManager
-from feature_extraction import FeatureExtractor
+from scanner import Scanner
+from sdr_manager import SDRManager
+
 
 class SpectrumAlert:
     """
     Main class that coordinates all components of the SpectrumAlert system.
     """
-    
+
     def __init__(self, config: ConfigManager):
         """
         Initialize the SpectrumAlert system.
@@ -25,7 +25,7 @@ class SpectrumAlert:
         self.config = config
         self.lite_mode = self.config.lite_mode
         self.feature_extractor = FeatureExtractor(config)
-        
+
         # SDR device
         print("Initializing SDR device...")
         self.sdr_manager = SDRManager(self.config.config)
@@ -34,18 +34,18 @@ class SpectrumAlert:
         except Exception as e:
             print(f"Error initializing SDR device: {e}")
             self.sdr_manager = None
-        
+
         # Scanner
         if self.sdr_manager:
             print("Initializing scanner...")
             self.scanner = Scanner(self.sdr_manager, self.config)
         else:
             self.scanner = None
-        
+
         # Model manager
         print("Initializing model manager...")
         self.model_manager = ModelManager(self.config.lite_mode)
-        
+
         # GPS manager
         print("Initializing GPS manager...")
         receiver_lat, receiver_lon = self.config.get_receiver_coordinates()
@@ -54,7 +54,7 @@ class SpectrumAlert:
             default_lon=receiver_lon
         )
         self.gps_manager.start()
-        
+
         # MQTT client
         print("Initializing MQTT client...")
         mqtt_broker, mqtt_port, mqtt_topics = self.config.get_mqtt_settings()
@@ -63,9 +63,9 @@ class SpectrumAlert:
             port=mqtt_port,
             topics=mqtt_topics
         )
-        
+
         print("SpectrumAlert initialization complete.")
-    
+
     def gather_data(self, duration_minutes, filename=None):
         """
         Gather data for a specified duration.
@@ -80,13 +80,13 @@ class SpectrumAlert:
         if not self.scanner:
             print("Scanner not initialized. Cannot gather data.")
             return False
-        
+
         if filename is None:
             if self.lite_mode:
                 filename = 'collected_data_lite.csv'
             else:
                 filename = 'collected_iq_data.csv'
-        
+
         print(f"Gathering data for {duration_minutes} minutes...")
         try:
             self.scanner.gather_data(filename, duration_minutes, use_threading=True)
@@ -95,7 +95,7 @@ class SpectrumAlert:
         except Exception as e:
             print(f"Error gathering data: {e}")
             return False
-    
+
     def train_models(self, data_file=None):
         """
         Train the RF fingerprinting and anomaly detection models.
@@ -107,21 +107,21 @@ class SpectrumAlert:
         bool: True if successful, False otherwise
         """
         print("Training models...")
-        
+
         try:
             # Load data
             features = self.model_manager.load_data(data_file)
-            
+
             # Train models
             rf_model, anomaly_model = self.model_manager.train_models(features)
-            
+
             if rf_model is None or anomaly_model is None:
                 print("Model training failed.")
                 return False
-            
+
             # Save models
             success = self.model_manager.save_models()
-            
+
             if success:
                 print("Model training complete.")
                 return True
@@ -131,7 +131,7 @@ class SpectrumAlert:
         except Exception as e:
             print(f"Error training models: {e}")
             return False
-    
+
     def monitor(self, callback=None):
         """
         Start monitoring the spectrum for anomalies.
@@ -145,21 +145,21 @@ class SpectrumAlert:
         if not self.scanner:
             print("Scanner not initialized. Cannot monitor.")
             return False
-        
+
         if not self.mqtt_client.connect():
             print("Warning: Could not connect to MQTT broker.")
-        
+
         # Load models
         if not self.model_manager.load_models():
             print("Warning: Could not load models. Anomaly detection will not be available.")
-        
+
         print("Starting spectrum monitoring...")
-        
+
         # Get configuration
         ham_bands = self.config.get_ham_bands()
         freq_step = self.config.get_freq_step()
         runs_per_freq = self.config.get_runs_per_freq()
-        
+
         # Monitor loop
         try:
             while True:
@@ -169,32 +169,32 @@ class SpectrumAlert:
                         for _ in range(runs_per_freq):
                             # Set frequency
                             self.sdr_manager.set_center_freq(current_freq)
-                            
+
                             # Read samples
                             sample_size = 128 * 1024 if self.lite_mode else 256 * 1024
                             iq_samples = self.sdr_manager.read_samples(sample_size)
-                            
+
                             # Extract features
                             features = self.feature_extractor.extract_features(iq_samples)
-                            
+
                             # Calculate signal strength
                             signal_strength = self.feature_extractor.calculate_signal_strength(iq_samples)
-                            
+
                             # Detect anomalies if model is available
                             is_anomaly = False
                             anomaly_score = 0
                             if self.model_manager.anomaly_model is not None:
                                 is_anomaly, anomaly_score = self.model_manager.detect_anomaly(features)
-                            
+
                             # Identify device if model is available
                             device_id = None
                             confidence = 0
                             if self.model_manager.rf_model is not None:
                                 device_id, confidence = self.model_manager.identify_device(features)
-                            
+
                             # Format frequency in MHz for display
                             freq_mhz = current_freq / 1e6
-                            
+
                             # Print monitoring info
                             print(f"Monitoring {freq_mhz:.2f} MHz, Signal: {signal_strength:.2f} dB", end="")
                             if is_anomaly:
@@ -202,37 +202,37 @@ class SpectrumAlert:
                             if device_id:
                                 print(f", Device: {device_id} (conf: {confidence:.2f})", end="")
                             print()
-                            
+
                             # Publish to MQTT if connected
                             if self.mqtt_client.connected:
                                 # Publish signal strength
                                 self.mqtt_client.publish_signal_strength(current_freq, signal_strength)
-                                
+
                                 # Publish anomaly if detected
                                 if is_anomaly:
                                     self.mqtt_client.publish_anomaly(
-                                        current_freq, 
+                                        current_freq,
                                         features=features,
                                         confidence=anomaly_score
                                     )
-                                
+
                                 # Publish coordinates periodically
                                 lat, lon, alt = self.gps_manager.get_coordinates()
                                 self.mqtt_client.publish_coordinates(lat, lon, alt)
-                            
+
                             # Call callback if provided and anomaly detected
                             if callback and is_anomaly:
                                 callback(current_freq, features, anomaly_score, device_id, confidence)
-                            
+
                             # Sleep briefly to avoid hammering the CPU
                             time.sleep(0.01)
-                        
+
                         # Move to next frequency
                         current_freq += freq_step
-                
+
                 # Sleep briefly between full band scans
                 time.sleep(0.1)
-        
+
         except KeyboardInterrupt:
             print("\nMonitoring stopped by user.")
         except Exception as e:
@@ -240,9 +240,9 @@ class SpectrumAlert:
             return False
         finally:
             self.cleanup()
-        
+
         return True
-    
+
     def analyze_single_frequency(self, frequency):
         """
         Analyze a single frequency.
@@ -256,32 +256,32 @@ class SpectrumAlert:
         if not self.sdr_manager:
             print("SDR manager not initialized. Cannot analyze frequency.")
             return None
-        
+
         # Set frequency
         self.sdr_manager.set_center_freq(frequency)
 
         # Read samples
         sample_size = 128 * 1024 if self.lite_mode else 256 * 1024
         iq_samples = self.sdr_manager.read_samples(sample_size)
-        
+
         # Extract features
         features = self.feature_extractor.extract_features(iq_samples)
-        
+
         # Calculate signal strength
         signal_strength = self.feature_extractor.calculate_signal_strength(iq_samples)
-        
+
         # Detect anomalies if model is available
         is_anomaly = False
         anomaly_score = 0
         if self.model_manager.anomaly_model is not None:
             is_anomaly, anomaly_score = self.model_manager.detect_anomaly(features)
-        
+
         # Identify device if model is available
         device_id = None
         confidence = 0
         if self.model_manager.rf_model is not None:
             device_id, confidence = self.model_manager.identify_device(features)
-        
+
         # Return results
         return {
             'frequency': frequency,
@@ -293,24 +293,23 @@ class SpectrumAlert:
             'device_id': device_id,
             'device_confidence': confidence
         }
-    
+
     def cleanup(self):
         """
         Clean up resources.
         """
         print("Cleaning up resources...")
-        
+
         # Close SDR device
         if self.sdr_manager:
             self.sdr_manager.close()
-        
+
         # Disconnect MQTT client
         if hasattr(self, 'mqtt_client') and self.mqtt_client:
             self.mqtt_client.disconnect()
-        
+
         # Stop GPS manager
         if hasattr(self, 'gps_manager') and self.gps_manager:
             self.gps_manager.stop()
-        
-        print("Cleanup complete.")
 
+        print("Cleanup complete.")
