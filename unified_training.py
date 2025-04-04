@@ -73,13 +73,14 @@ def train_rf_fingerprinting_model(features, lite_mode=False):
         model = RandomForestClassifier(
             n_estimators=50,  # Reduced number of trees for faster training
             max_depth=10,     # Reduced depth for lower complexity
-            random_state=42
+            random_state=42,
+            class_weight='balanced'  # Add class weight to handle imbalance
         )
         print("Training the RF fingerprinting model (lite version)...")
         model.fit(X_train, y_train)
     else:
         # Full version with hyperparameter tuning
-        model = RandomForestClassifier(random_state=42)
+        model = RandomForestClassifier(random_state=42, class_weight='balanced')
         param_grid = {
             'n_estimators': [50, 100, 150],
             'max_depth': [None, 10, 20, 30],
@@ -98,7 +99,8 @@ def train_rf_fingerprinting_model(features, lite_mode=False):
     y_pred = model.predict(X_test)
     print(f"Classification accuracy: {accuracy_score(y_test, y_pred) * 100:.2f}%")
     print("Classification Report:")
-    print(classification_report(y_test, y_pred))
+    # Fixed zero_division parameter to suppress warnings
+    print(classification_report(y_test, y_pred, zero_division=0))
 
     # Cross-validation for performance evaluation
     skf = StratifiedKFold(n_splits=max_cv_splits)
@@ -115,8 +117,6 @@ def train_rf_fingerprinting_model(features, lite_mode=False):
     print("Anomaly detection model trained successfully.")
 
     return model, anomaly_detector
-
-# These functions are no longer needed as we handle saving directly in the main code
 
 # Parse command line arguments
 def parse_arguments():
@@ -157,7 +157,9 @@ if __name__ == "__main__":
 
     try:
         features = load_data_from_csv(data_file)
-        print(f"Sample features (first 5): {features[:5]}")  # Debugging statement
+        print(f"Loaded {len(features)} samples with {len(features[0])} features each")
+        if len(features) > 0:
+            print(f"Feature range: min={np.min(features):.4f}, max={np.max(features):.4f}")
     except Exception as e:
         print(f"Error loading data: {e}")
         exit(1)
