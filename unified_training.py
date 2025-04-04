@@ -8,19 +8,101 @@ import os
 import csv
 import configparser
 import argparse
+import warnings
 
-# Function to handle loading CSV data into features
+# Function to check if a row looks like a header
+def is_header_row(row):
+    """Check if a row likely contains headers rather than data"""
+    header_keywords = ['frequency', 'amplitude', 'mean', 'std', 'magnitude', 'fft', 
+                       'skew', 'kurt', 'phase', 'cyclo', 'entropy', 'papr',
+                       'ratio', 'energy']
+
+    if not row:
+        return False
+
+    # Convert all values to lowercase for case-insensitive comparison
+    row_lower = [str(val).lower() for val in row]
+
+    # Check if any cell contains known header keywords
+    for cell in row_lower:
+        for keyword in header_keywords:
+            if keyword in cell:
+                return True
+
+    # Check if most cells can't be converted to float (typical for headers)
+    non_numeric = 0
+    for val in row:
+        try:
+            float(val)
+        except (ValueError, TypeError):
+            non_numeric += 1
+
+    # If more than half of the cells are non-numeric, likely a header
+    return non_numeric > len(row) / 2
+
+# Improved function to handle loading CSV data into features
 def load_data_from_csv(filename):
     if not os.path.exists(filename):
         raise FileNotFoundError(f"File {filename} not found.")
 
     features = []
+    headers = None
+    header_rows_skipped = 0
+    
+    print(f"Reading CSV file: {filename}")
     with open(filename, 'r') as f:
+        # Read the first few lines to debug
+        first_lines = [next(f) for _ in range(min(5, sum(1 for _ in open(filename))))]
+        f.seek(0)  # Reset file pointer
+        
+        print("First few lines of the file:")
+        for i, line in enumerate(first_lines):
+            print(f"Line {i+1}: {line.strip()}")
+        
+        # Reset file pointer again
+        f.seek(0)
+        
+        # Use CSV reader
         reader = csv.reader(f)
-        header = next(reader)  # Skip the header row
+        
+        # Get header
+        try:
+            headers = next(reader)
+            print(f"Headers detected: {headers}")
+        except StopIteration:
+            raise ValueError("CSV file is empty or cannot be read.")
+        
+        # Process data rows
+        line_number = 1
         for row in reader:
-            features.append([float(value) for value in row[1:]])  # Extracting feature data
+            line_number += 1
+            if not row:  # Skip empty rows
+                continue
+                
+            # Check if this row looks like another header
+            if is_header_row(row):
+                header_rows_skipped += 1
+                warnings.warn(f"Skipping line {line_number} that appears to be another header: {row}")
+                continue
+                
+            try:
+                # Skip frequency column (first column) and convert the rest to float
+                feature_values = [float(value) for value in row[1:]]
+                features.append(feature_values)
+            except ValueError as e:
+                print(f"Error parsing line {line_number}: {row}")
+                print(f"Exception: {e}")
+                # Skip problematic rows but continue processing
+                continue
 
+    if not features:
+        raise ValueError("No valid feature data could be extracted from the file.")
+    
+    print(f"Successfully loaded {len(features)} feature vectors")
+    if header_rows_skipped > 0:
+        print(f"Warning: Skipped {header_rows_skipped} rows that appeared to be headers")
+    print(f"Feature columns: {headers[1:]}") 
+    
     return np.array(features)
 
 # Function to load configuration

@@ -6,6 +6,13 @@ __pycache__/
 # C extensions
 *.so
 
+# Generated files
+*.pkl
+*.csv
+
+# Config file
+config.ini
+
 # Distribution / packaging
 .Python
 .idea/
