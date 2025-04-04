@@ -10,8 +10,6 @@ from csv_writer import CSVWriter
 from config_manager import ConfigManager
 from sdr_manager import SDRManager
 
-STD_SAMPLE_SIZE = 128 * 1024
-
 class Scanner:
     """
     A class for scanning frequency bands and collecting signal data.
@@ -43,6 +41,8 @@ class Scanner:
         print(f"Scanner csv_writer {self.csv_writer}")
         self.feature_extractor = FeatureExtractor(config)
         print(f"Scanner feature_extractor {self.feature_extractor}")
+
+        self.sample_size = 128 * 1024 if self.lite_mode else 256 * 1024
         
         # Get min_db from config if available
         if hasattr(config.config, 'get'):
@@ -58,7 +58,7 @@ class Scanner:
     def initialize_pca(self, n_components=8, min_samples=8, max_attempts=100):
         """
         Initialize PCA for dimensionality reduction using valid feature vectors
-        from multiple frequency bands.
+        from multiple frequencies across the bands.
 
         Parameters:
         n_components (int): Max number of PCA components (default: 8)
@@ -75,30 +75,49 @@ class Scanner:
                 if len(pca_training_data) >= min_samples:
                     break
 
-                self.sdr_manager.set_center_freq(band_start)
-                sample_size = STD_SAMPLE_SIZE
-                iq_samples = self.sdr_manager.read_samples(sample_size)
+                # Try multiple frequencies within each band instead of just band_start
+                # Sample at beginning, middle, and end of band
+                frequencies = [
+                    band_start,
+                    band_start + (band_end - band_start) / 2,
+                    band_end - self.freq_step
+                ]
 
-                if iq_samples is None or len(iq_samples) == 0:
-                    print(f"⚠️ No IQ samples received for {band_start} Hz – skipping.")
-                    skipped += 1
+                for freq in frequencies:
+                    if len(pca_training_data) >= min_samples or attempts >= max_attempts:
+                        break
+
+                    self.sdr_manager.set_center_freq(freq)
+                    print(f"Reading frequency {freq / 1e6:.3f} MHz...")
+
+                    # Add a small delay to let the SDR settle
+                    time.sleep(0.1)
+
+                    iq_samples = self.sdr_manager.read_samples(self.sample_size)
+                    if iq_samples is None or len(iq_samples) == 0:
+                        print(f"⚠️ No IQ samples received for {freq / 1e6:.3f} MHz – skipping.")
+                        skipped += 1
+                        attempts += 1
+                        continue
+
+                    features = self.feature_extractor.extract_features(iq_samples)
+                    if np.isnan(features).any() or np.isinf(features).any():
+                        print(f"⚠️ Skipping invalid feature set at {freq / 1e6:.3f} MHz:", features)
+                        skipped += 1
+                        attempts += 1
+                        continue
+
+                    pca_training_data.append(features)
+                    print(f"✅ Valid sample collected at {freq / 1e6:.3f} MHz ({len(pca_training_data)}/{min_samples})")
                     attempts += 1
-                    continue
-
-                features = self.feature_extractor.extract_features(iq_samples)
-
-                if np.isnan(features).any() or np.isinf(features).any():
-                    print(f"⚠️ Skipping invalid feature set at {band_start} Hz:", features)
-                    skipped += 1
-                    attempts += 1
-                    continue
-
-                pca_training_data.append(features)
-                attempts += 1
 
         if len(pca_training_data) < min_samples:
-            raise ValueError(f"❌ PCA initialization failed: Only got {len(pca_training_data)} valid samples "
-                             f"after {attempts} attempts (min required: {min_samples}).")
+            # Instead of raising an exception, which would stop the program,
+            # use a warning and proceed with whatever samples we have
+            print(f"⚠️ Warning: Only collected {len(pca_training_data)} valid samples (needed {min_samples})")
+            if len(pca_training_data) == 0:
+                print("❌ PCA initialization failed: No valid samples collected.")
+                return None
 
         # Set appropriate number of components
         num_features = len(pca_training_data[0])
@@ -110,6 +129,7 @@ class Scanner:
         print(f"✅ PCA initialized with {len(pca_training_data)} samples "
               f"({skipped} skipped), using {adjusted_components} components.")
 
+        return self.pca
 
     def scan_band(self, band_start, band_end, filename):
         """
@@ -126,8 +146,7 @@ class Scanner:
             run_features = []
             for _ in range(self.runs_per_freq):
                 self.sdr_manager.set_center_freq(current_freq)
-                sample_size = STD_SAMPLE_SIZE
-                iq_samples = self.sdr_manager.read_samples(sample_size)
+                iq_samples = self.sdr_manager.read_samples(self.sample_size)
                 features = self.feature_extractor.extract_features(iq_samples)
                 run_features.append(features)
 
@@ -213,8 +232,7 @@ class Scanner:
             threshold_db = self.min_db
             
         self.sdr_manager.set_center_freq(frequency)
-        sample_size = STD_SAMPLE_SIZE
-        iq_samples = self.sdr_manager.read_samples(sample_size)
+        iq_samples = self.sdr_manager.read_samples(self.sample_size)
         signal_strength = self.feature_extractor.calculate_signal_strength(iq_samples)
         
         return signal_strength > threshold_db
