@@ -55,6 +55,8 @@ class Scanner:
         self.header_written = False
         self.header_lock = threading.Lock()
         self.pca = None
+        # Add a flag to signal when scanning should stop
+        self.stop_scanning = False
 
     def initialize_pca(self, n_components=8, min_samples=8, max_attempts=100):
         """
@@ -140,12 +142,23 @@ class Scanner:
         band_start (float): Start frequency of the band
         band_end (float): End frequency of the band
         filename (str): CSV file to save the data
+
+        Returns:
+        bool: False if scanning should stop, True otherwise
         """
         current_freq = band_start
 
         while current_freq <= band_end:
+            # Check if scanning should stop
+            if self.stop_scanning:
+                return False
+
             run_features = []
             for _ in range(self.runs_per_freq):
+                # Check if scanning should stop
+                if self.stop_scanning:
+                    return False
+
                 self.sdr_manager.set_center_freq(current_freq)
                 iq_samples = self.sdr_manager.read_samples(self.sample_size)
                 features = self.feature_extractor.extract_features(iq_samples)
@@ -172,13 +185,18 @@ class Scanner:
             # Move to the next frequency
             current_freq += self.freq_step
 
+        return True
+
     def scan_all_bands(self, filename, use_threading=True):
         """
         Scan all configured frequency bands.
-        
+
         Parameters:
         filename (str): CSV file to save the data
         use_threading (bool): Whether to use multi-threading for scanning
+
+        Returns:
+        bool: False if scanning should stop, True otherwise
         """
         if use_threading:
             with ThreadPoolExecutor() as executor:
@@ -190,10 +208,16 @@ class Scanner:
 
                 # Wait for all threads to finish
                 for future in futures:
-                    future.result()
+                    result = future.result()
+                    if not result:  # If one thread returns False, stop scanning
+                        return False
         else:
             for band_start, band_end in self.ham_bands:
-                self.scan_band(band_start, band_end, filename)
+                result = self.scan_band(band_start, band_end, filename)
+                if not result:  # If scanning should stop
+                    return False
+
+        return True
 
     def timed_scan(self, filename, duration_minutes, use_threading=True):
         """
@@ -206,17 +230,48 @@ class Scanner:
         """
         start_time = time.time()
         duration_seconds = duration_minutes * 60
+        self.stop_scanning = False  # Reset the stop flag
 
         # Initialize PCA if not already initialized
         if self.pca is None:
             self.initialize_pca()
 
+        # Create a monitoring thread to check elapsed time
+        def monitor_time():
+            while not self.stop_scanning:
+                elapsed_time = time.time() - start_time
+                if elapsed_time >= duration_seconds:
+                    print(f"Reached specified duration of {duration_minutes} minutes. Stopping scan.")
+                    self.stop_scanning = True
+                    break
+                time.sleep(1)  # Check every second
+
+        # Start the monitoring thread
+        monitor_thread = threading.Thread(target=monitor_time, daemon=True)
+        monitor_thread.start()
+
         # Keep scanning until the duration is reached
-        while time.time() - start_time < duration_seconds:
-            self.scan_all_bands(filename, use_threading)
+        completed_scans = 0
+        while time.time() - start_time < duration_seconds and not self.stop_scanning:
+            print(f"Starting band scan cycle {completed_scans + 1}...")
+            if not self.scan_all_bands(filename, use_threading):
+                break  # Stop if scan_all_bands returns False (duration reached)
+
+            completed_scans += 1
+            print(
+                f"Completed scan cycle {completed_scans}. Time elapsed: {(time.time() - start_time) / 60:.2f} minutes")
+
+            # Check again after completing a full cycle
+            if time.time() - start_time >= duration_seconds:
+                break
 
             # Sleep briefly to avoid hammering the CPU
             time.sleep(0.1)
+
+        print(
+            f"Scanning complete. Performed {completed_scans} complete band scans over {(time.time() - start_time) / 60:.2f} minutes.")
+        self.stop_scanning = True  # Ensure flag is set
+        monitor_thread.join(timeout=1)  # Wait for monitor thread to end
 
     def detect_signal(self, frequency, threshold_db=None):
         """
