@@ -1,10 +1,6 @@
 """
-FRS Signal Detector with MQTT Reporting
---------------------------------------
-A Python application that uses SoapySDR to detect FRS radio signals and report them via MQTT.
-Supports both HackRF and RTL-SDR devices.
-
-FRS (Family Radio Service) operates in the 462 MHz and 467 MHz bands.
+LPD433 Signal Detector with MQTT Reporting
+Detects LPD433 (433.050–434.790 MHz) transmissions on 25 kHz channels via SoapySDR.
 """
 
 import numpy as np
@@ -31,7 +27,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger('frs_detector')
+logger = logging.getLogger('lpd433_detector')
 
 # Global variables
 exit_event = Event()
@@ -40,11 +36,11 @@ class FRSDetector:
     """
     Detector for FRS signals using SoapySDR.
     """
-    # FRS operates in the 462 and 467 MHz bands
+    # LPD433 band (433.050–434.790 MHz)
     DEFAULT_FREQ = 462.6e6  # Center frequency in Hz
-    DEFAULT_SAMPLE_RATE = 8e6  # Sample rate in Hz (8 MHz to cover more spectrum at once)
-    DEFAULT_BANDWIDTH = 6e6  # Bandwidth in Hz (6 MHz to cover many channels at once)
-    DEFAULT_GAIN = 40  # Gain in dB
+    DEFAULT_SAMPLE_RATE = 2e6  # Sample rate in Hz (covers ~1.74 MHz band)
+    DEFAULT_BANDWIDTH = 2e6    # Bandwidth in Hz (2 MHz)
+    DEFAULT_GAIN = 30          # Gain in dB
     
     # Detection parameters
     DETECTION_THRESHOLD = 15.0  # Power threshold for signal detection
